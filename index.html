@@ -142,6 +142,20 @@
             justify-content: center;
             text-align: center;
         }
+
+        /* NOUVEAU : Style pour les citations dans le chat */
+        .reply-preview-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-left: 3px solid var(--primary-color);
+            padding: 6px 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+        .liquid-bubble-me .reply-preview-box {
+            border-left-color: white;
+            background: rgba(0, 0, 0, 0.15);
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -322,6 +336,11 @@
         <div id="typing-indicator" class="max-w-4xl mx-auto w-full"></div>
         <div class="p-6 bg-white/20 border-t border-white/20">
             <div class="max-w-4xl mx-auto w-full flex flex-col gap-3">
+                <div id="reply-preview" class="hidden text-xs text-blue-600 font-bold px-3 py-2 bg-white/60 rounded-xl flex justify-between items-center backdrop-blur-md border border-blue-200">
+                    <div class="truncate">Répondre à <span id="reply-user" class="underline"></span>: <span id="reply-text" class="italic font-normal"></span></div>
+                    <button onclick="cancelReply()" class="text-red-500 font-black px-2">✕</button>
+                </div>
+
                 <div id="file-preview" class="hidden text-xs text-blue-600 font-bold px-3 py-2 bg-blue-50/50 rounded-xl flex justify-between items-center backdrop-blur-md">
                     <span id="file-name"></span>
                     <button onclick="clearFile()" class="text-red-500 font-black px-2">✕</button>
@@ -406,6 +425,10 @@
         let typingTimeout;
         let isHistoryMode = false;
         let localVuesIds = []; 
+        
+        // NOUVEAU : Gestion des réponses
+        let replyToMsg = null; 
+        let allMessagesCache = [];
 
         window.onload = () => { 
             const today = new Date().toISOString().split('T')[0];
@@ -761,6 +784,19 @@
 
         function toggleViews(id) { const el = document.querySelector(`#msg-${id} .seen-list`); if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block'; }
 
+        // NOUVEAU : Fonctions de réponse
+        function setReply(id, auteur, message) {
+            replyToMsg = { id, auteur, message: message.substring(0, 50) + (message.length > 50 ? '...' : '') };
+            document.getElementById('reply-user').innerText = auteur;
+            document.getElementById('reply-text').innerText = replyToMsg.message;
+            document.getElementById('reply-preview').classList.remove('hidden');
+            document.getElementById('global-comment-text').focus();
+        }
+        function cancelReply() {
+            replyToMsg = null;
+            document.getElementById('reply-preview').classList.add('hidden');
+        }
+
         async function loadGlobalComments(forcedTag = null) {
             const cont = document.getElementById('global-comments-container');
             const isBottom = cont.scrollHeight - cont.clientHeight <= cont.scrollTop + 50;
@@ -777,7 +813,8 @@
             
             const { data: msgs } = await query.order('created_at', { ascending: true });
             if (!msgs) return;
-            
+            allMessagesCache = msgs; // Garder en cache pour retrouver les textes des réponses
+
             let html = ""; let lastAid = "";
             for(let c of msgs) {
                 if (c.message && c.message.startsWith("[SYSTEM_TAG]")) {
@@ -788,7 +825,24 @@
 
                 const isMe = String(c.auteur_id) === String(currentUserId);
                 const same = c.auteur_id === lastAid;
-                const msgText = (c.message || "").replace(/\[PRIV_ID:.*?\]/, "");
+                
+                // NOUVEAU : Extraire le tag PRIV_ID et le tag REPLY
+                let rawMsg = c.message || "";
+                rawMsg = rawMsg.replace(/\[PRIV_ID:.*?\]/, "");
+                
+                let replyHtml = "";
+                const replyMatch = rawMsg.match(/^\[REPLY:(\d+)\]/);
+                if (replyMatch) {
+                    const replyId = replyMatch[1];
+                    rawMsg = rawMsg.replace(`[REPLY:${replyId}]`, "");
+                    const original = allMessagesCache.find(m => String(m.id) === String(replyId));
+                    if (original) {
+                        const cleanOrig = original.message.replace(/\[PRIV_ID:.*?\]/, "").replace(/^\[REPLY:\d+\]/, "");
+                        replyHtml = `<div class="reply-preview-box"><b>${escapeHTML(original.auteur)}</b>: ${escapeHTML(cleanOrig.substring(0, 40))}...</div>`;
+                    }
+                }
+
+                const msgText = rawMsg;
                 const detectedUrl = extractUrl(msgText);
 
                 const vStr = c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El").map(v => v.user_pseudo).join(', ') || "";
@@ -812,12 +866,14 @@
                         <div class="flex items-center gap-2 max-w-full ${isMe ? 'flex-row-reverse' : 'flex-row'}">
                             <div class="group relative flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1">
                                 <div class="msg-actions flex gap-2">
+                                    <button onclick="setReply(${c.id}, '${escapeHTML(c.auteur).replace(/'/g, "\\'")}', '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">RÉPONDRE</button>
                                     ${isAdmin ? `<button onclick="togglePin(${c.id}, ${c.is_pinned}, '${c.auteur}')" class="bg-amber-100 p-1 rounded text-amber-600 text-[9px] font-black">📌</button>` : ''}
                                     ${isMe && !c.is_deleted ? `<button onclick="editComment(${c.id}, '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">EDIT</button>` : ''}
                                     ${(canDel || isMe) && !c.is_deleted ? `<button onclick="deleteComment(${c.id}, '${c.auteur}')" class="bg-white/60 p-1 rounded text-red-500 text-[9px] font-black">SUPPR</button>` : ''}
                                 </div>
                                 <div style="${deletedStyle}" onclick="toggleViews(${c.id})" class="p-3 px-4 rounded-2xl shadow-sm cursor-pointer ${isMe ? 'liquid-bubble-me text-white rounded-tr-none' : 'liquid-bubble text-gray-800 rounded-tl-none'} ${c.is_pinned ? 'border-2 border-amber-400' : ''}">
                                     ${deletedTag}
+                                    ${replyHtml}
                                     ${fileHtml}
                                     <span class="break-words">${escapeHTML(msgText)}</span>
                                     <div class="flex justify-between items-center gap-4 mt-1">
@@ -908,11 +964,19 @@
             if (m.startsWith('/mute ')) { await handleMute(m.split(' ')[1]); input.value = ""; return; }
             if (m.startsWith('/demute ')) { await handleDemute(m.split(' ')[1]); input.value = ""; return; }
 
+            // NOUVEAU : Préparer le message avec tags
+            let finalMsg = "";
             if (currentChatType === "private") {
                 const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', assistanceTargetId).eq('muted_id', currentUserId).single();
                 if (isMutedByTarget) { document.getElementById('mute-screen').style.display = 'flex'; input.value = ""; return; }
-                m = getPrivateTag(currentUserId, assistanceTargetId) + m;
+                finalMsg += getPrivateTag(currentUserId, assistanceTargetId);
             }
+            
+            if (replyToMsg) {
+                finalMsg += `[REPLY:${replyToMsg.id}]`;
+            }
+
+            finalMsg += m;
 
             let url = null;
             if (selectedFile) {
@@ -920,8 +984,8 @@
                 const { data } = await _supabase.storage.from('chat-attachments').upload(name, selectedFile);
                 if (data) url = _supabase.storage.from('chat-attachments').getPublicUrl(name).data.publicUrl;
             }
-            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: m, file_url: url }]);
-            input.value = ""; clearFile(); loadGlobalComments();
+            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: finalMsg, file_url: url }]);
+            input.value = ""; clearFile(); cancelReply(); loadGlobalComments();
         }
 
         async function fetchDevoirs() {
@@ -968,7 +1032,7 @@
             b.className = isPinnedFilterActive ? "bg-amber-500 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-sm" : "bg-amber-100 text-amber-600 px-3 py-1.5 rounded-xl text-xs font-black shadow-sm hover:bg-amber-200";
             document.getElementById('pinned-text').innerText = isPinnedFilterActive ? "Tout" : "Messages Fixés";
         }
-        function closeChat() { document.getElementById('chat-modal').classList.add('hidden'); isHistoryMode = false; }
+        function closeChat() { document.getElementById('chat-modal').classList.add('hidden'); isHistoryMode = false; cancelReply(); }
         function handleFileSelect() { const f = document.getElementById('chat-file').files[0]; if (f) { selectedFile = f; document.getElementById('file-name').innerText = f.name; document.getElementById('file-preview').classList.remove('hidden'); } }
         function clearFile() { selectedFile = null; document.getElementById('chat-file').value = ""; document.getElementById('file-preview').classList.add('hidden'); }
 
