@@ -143,7 +143,6 @@
             text-align: center;
         }
 
-        /* NOUVEAU : Style pour les citations dans le chat */
         .reply-preview-box {
             background: rgba(255, 255, 255, 0.1);
             border-left: 3px solid var(--primary-color);
@@ -155,6 +154,54 @@
         .liquid-bubble-me .reply-preview-box {
             border-left-color: white;
             background: rgba(0, 0, 0, 0.15);
+        }
+
+        /* --- AJOUT REACTIONS --- */
+        .reaction-trigger {
+            opacity: 0;
+            position: absolute;
+            right: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+        .group:hover .reaction-trigger { opacity: 1; right: -25px; }
+        .reactions-container {
+            position: absolute;
+            bottom: -10px;
+            right: 0;
+            display: flex;
+            gap: 2px;
+            background: rgba(255,255,255,0.8);
+            backdrop-filter: blur(5px);
+            padding: 2px 5px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.5);
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .emoji-picker {
+            position: fixed;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 15px;
+            display: grid;
+            grid-template-cols: repeat(4, 1fr);
+            gap: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border: 1px solid #eee;
         }
     </style>
 </head>
@@ -192,12 +239,10 @@
                 <input type="date" id="date-selector" onchange="fetchDevoirs()" class="p-2 bg-white/80 rounded-xl border-none text-sm font-bold text-blue-600 outline-none">
             </div>
             <div class="flex items-center gap-3 flex-wrap justify-center">
-                
                 <button id="notif-bell" onclick="handleBellClick()" class="bell-btn w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-lg hover:bg-gray-50 transition-all border border-gray-200 text-xl">
                     🔔
                     <span id="bell-count" class="hidden absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-black w-5 h-5 rounded-full border-2 border-red-600 flex items-center justify-center">0</span>
                 </button>
-
                 <button onclick="openChatList()" class="relative bg-white text-gray-800 px-5 py-2 rounded-full font-bold shadow-lg hover:bg-gray-50 transition-all border border-gray-200">
                     <span>💬 Messages Privés</span>
                     <div id="assistance-notif" class="notification-dot"></div>
@@ -340,7 +385,6 @@
                     <div class="truncate">Répondre à <span id="reply-user" class="underline"></span>: <span id="reply-text" class="italic font-normal"></span></div>
                     <button onclick="cancelReply()" class="text-red-500 font-black px-2">✕</button>
                 </div>
-
                 <div id="file-preview" class="hidden text-xs text-blue-600 font-bold px-3 py-2 bg-blue-50/50 rounded-xl flex justify-between items-center backdrop-blur-md">
                     <span id="file-name"></span>
                     <button onclick="clearFile()" class="text-red-500 font-black px-2">✕</button>
@@ -355,6 +399,17 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="emoji-picker" class="hidden emoji-picker">
+        <button onclick="addReactionToMessage('👍')" class="hover:scale-125 transition">👍</button>
+        <button onclick="addReactionToMessage('❤️')" class="hover:scale-125 transition">❤️</button>
+        <button onclick="addReactionToMessage('😂')" class="hover:scale-125 transition">😂</button>
+        <button onclick="addReactionToMessage('😮')" class="hover:scale-125 transition">😮</button>
+        <button onclick="addReactionToMessage('🔥')" class="hover:scale-125 transition">🔥</button>
+        <button onclick="addReactionToMessage('👏')" class="hover:scale-125 transition">👏</button>
+        <button onclick="addReactionToMessage('😢')" class="hover:scale-125 transition">😢</button>
+        <button onclick="addReactionToMessage('✅')" class="hover:scale-125 transition">✅</button>
     </div>
 
     <div id="detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/5 backdrop-blur-sm">
@@ -425,10 +480,9 @@
         let typingTimeout;
         let isHistoryMode = false;
         let localVuesIds = []; 
-        
-        // NOUVEAU : Gestion des réponses
-        let replyToMsg = null; 
+        let replyToMsg = null;
         let allMessagesCache = [];
+        let reactionTargetId = null; // Cible pour la réaction
 
         window.onload = () => { 
             const today = new Date().toISOString().split('T')[0];
@@ -784,17 +838,48 @@
 
         function toggleViews(id) { const el = document.querySelector(`#msg-${id} .seen-list`); if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block'; }
 
-        // NOUVEAU : Fonctions de réponse
-        function setReply(id, auteur, message) {
+        function initiateReply(id, auteur, message) {
             replyToMsg = { id, auteur, message: message.substring(0, 50) + (message.length > 50 ? '...' : '') };
             document.getElementById('reply-user').innerText = auteur;
             document.getElementById('reply-text').innerText = replyToMsg.message;
             document.getElementById('reply-preview').classList.remove('hidden');
             document.getElementById('global-comment-text').focus();
         }
+
         function cancelReply() {
             replyToMsg = null;
             document.getElementById('reply-preview').classList.add('hidden');
+        }
+
+        /* --- LOGIQUE REACTIONS --- */
+        function openEmojiPicker(id, event) {
+            reactionTargetId = id;
+            const picker = document.getElementById('emoji-picker');
+            picker.style.left = event.clientX + 'px';
+            picker.style.top = event.clientY + 'px';
+            picker.classList.toggle('hidden');
+        }
+
+        async function addReactionToMessage(emoji) {
+            document.getElementById('emoji-picker').classList.add('hidden');
+            const msg = allMessagesCache.find(m => m.id === reactionTargetId);
+            if (!msg) return;
+
+            let reactions = {};
+            const reactMatch = msg.message.match(/\[REACTIONS:({.*?})\]/);
+            if (reactMatch) {
+                try { reactions = JSON.parse(reactMatch[1]); } catch(e) {}
+            }
+
+            // Ajoute ou incrémente l'emoji
+            if (!reactions[emoji]) reactions[emoji] = 0;
+            reactions[emoji]++;
+
+            let cleanMsg = msg.message.replace(/\[REACTIONS:({.*?})\]/, "");
+            const newMsg = cleanMsg + `[REACTIONS:${JSON.stringify(reactions)}]`;
+
+            await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
+            loadGlobalComments();
         }
 
         async function loadGlobalComments(forcedTag = null) {
@@ -813,20 +898,19 @@
             
             const { data: msgs } = await query.order('created_at', { ascending: true });
             if (!msgs) return;
-            allMessagesCache = msgs; // Garder en cache pour retrouver les textes des réponses
+            allMessagesCache = msgs;
 
             let html = ""; let lastAid = "";
-            for(let c of msgs) {
+            msgs.forEach(c => {
                 if (c.message && c.message.startsWith("[SYSTEM_TAG]")) {
                     html += `<div class="system-msg-box">${escapeHTML(c.message.replace("[SYSTEM_TAG] ", ""))}</div>`;
                     lastAid = "system";
-                    continue;
+                    return;
                 }
 
                 const isMe = String(c.auteur_id) === String(currentUserId);
                 const same = c.auteur_id === lastAid;
                 
-                // NOUVEAU : Extraire le tag PRIV_ID et le tag REPLY
                 let rawMsg = c.message || "";
                 rawMsg = rawMsg.replace(/\[PRIV_ID:.*?\]/, "");
                 
@@ -837,14 +921,28 @@
                     rawMsg = rawMsg.replace(`[REPLY:${replyId}]`, "");
                     const original = allMessagesCache.find(m => String(m.id) === String(replyId));
                     if (original) {
-                        const cleanOrig = original.message.replace(/\[PRIV_ID:.*?\]/, "").replace(/^\[REPLY:\d+\]/, "");
+                        const cleanOrig = original.message.replace(/\[PRIV_ID:.*?\]/, "").replace(/^\[REPLY:\d+\]/, "").replace(/\[REACTIONS:({.*?})\]/, "");
                         replyHtml = `<div class="reply-preview-box"><b>${escapeHTML(original.auteur)}</b>: ${escapeHTML(cleanOrig.substring(0, 40))}...</div>`;
                     }
                 }
 
+                // Extraction des réactions
+                let reactionsHtml = "";
+                const reactMatch = rawMsg.match(/\[REACTIONS:({.*?})\]/);
+                if (reactMatch) {
+                    try {
+                        const reactions = JSON.parse(reactMatch[1]);
+                        reactionsHtml = `<div class="reactions-container">`;
+                        for (const [emoji, count] of Object.entries(reactions)) {
+                            reactionsHtml += `<span>${emoji}${count > 1 ? count : ''}</span>`;
+                        }
+                        reactionsHtml += `</div>`;
+                        rawMsg = rawMsg.replace(/\[REACTIONS:({.*?})\]/, "");
+                    } catch(e) {}
+                }
+
                 const msgText = rawMsg;
                 const detectedUrl = extractUrl(msgText);
-
                 const vStr = c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El").map(v => v.user_pseudo).join(', ') || "";
                 let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                 const d = new Date(c.created_at);
@@ -865,13 +963,15 @@
                         ${!same ? `<div class="px-2 mb-0.5"><span class="text-[10px] font-bold text-gray-500">${escapeHTML(c.auteur)}</span></div>` : ''}
                         <div class="flex items-center gap-2 max-w-full ${isMe ? 'flex-row-reverse' : 'flex-row'}">
                             <div class="group relative flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1">
+                                <div class="reaction-trigger" onclick="openEmojiPicker(${c.id}, event)">👀</div>
+
                                 <div class="msg-actions flex gap-2">
-                                    <button onclick="setReply(${c.id}, '${escapeHTML(c.auteur).replace(/'/g, "\\'")}', '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">RÉPONDRE</button>
+                                    <button onclick="initiateReply(${c.id}, '${escapeHTML(c.auteur).replace(/'/g, "\\'")}', '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">RÉPONDRE</button>
                                     ${isAdmin ? `<button onclick="togglePin(${c.id}, ${c.is_pinned}, '${c.auteur}')" class="bg-amber-100 p-1 rounded text-amber-600 text-[9px] font-black">📌</button>` : ''}
                                     ${isMe && !c.is_deleted ? `<button onclick="editComment(${c.id}, '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">EDIT</button>` : ''}
                                     ${(canDel || isMe) && !c.is_deleted ? `<button onclick="deleteComment(${c.id}, '${c.auteur}')" class="bg-white/60 p-1 rounded text-red-500 text-[9px] font-black">SUPPR</button>` : ''}
                                 </div>
-                                <div style="${deletedStyle}" onclick="toggleViews(${c.id})" class="p-3 px-4 rounded-2xl shadow-sm cursor-pointer ${isMe ? 'liquid-bubble-me text-white rounded-tr-none' : 'liquid-bubble text-gray-800 rounded-tl-none'} ${c.is_pinned ? 'border-2 border-amber-400' : ''}">
+                                <div style="${deletedStyle}" onclick="toggleViews(${c.id})" class="relative p-3 px-4 rounded-2xl shadow-sm cursor-pointer ${isMe ? 'liquid-bubble-me text-white rounded-tr-none' : 'liquid-bubble text-gray-800 rounded-tl-none'} ${c.is_pinned ? 'border-2 border-amber-400' : ''}">
                                     ${deletedTag}
                                     ${replyHtml}
                                     ${fileHtml}
@@ -879,6 +979,7 @@
                                     <div class="flex justify-between items-center gap-4 mt-1">
                                         ${vuesHtml}<span class="msg-time ${isMe ? 'text-blue-200' : 'text-gray-400'} text-[8px]">${time}</span>
                                     </div>
+                                    ${reactionsHtml}
                                 </div>
                             </div>
                             ${detectedUrl ? `
@@ -889,7 +990,7 @@
                         </div>
                     </div>`;
                 lastAid = c.auteur_id;
-            }
+            });
             cont.innerHTML = html; if (isFirst || isBottom) cont.scrollTop = cont.scrollHeight;
         }
 
@@ -964,7 +1065,6 @@
             if (m.startsWith('/mute ')) { await handleMute(m.split(' ')[1]); input.value = ""; return; }
             if (m.startsWith('/demute ')) { await handleDemute(m.split(' ')[1]); input.value = ""; return; }
 
-            // NOUVEAU : Préparer le message avec tags
             let finalMsg = "";
             if (currentChatType === "private") {
                 const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', assistanceTargetId).eq('muted_id', currentUserId).single();
@@ -972,10 +1072,7 @@
                 finalMsg += getPrivateTag(currentUserId, assistanceTargetId);
             }
             
-            if (replyToMsg) {
-                finalMsg += `[REPLY:${replyToMsg.id}]`;
-            }
-
+            if (replyToMsg) { finalMsg += `[REPLY:${replyToMsg.id}]`; }
             finalMsg += m;
 
             let url = null;
@@ -1037,10 +1134,16 @@
         function clearFile() { selectedFile = null; document.getElementById('chat-file').value = ""; document.getElementById('file-preview').classList.add('hidden'); }
 
         setInterval(() => { 
-            if (!document.getElementById('chat-modal').classList.contains('hidden')) {
-                loadGlobalComments();
-            } else if (currentUser) { checkNewMessages(); }
+            if (!document.getElementById('chat-modal').classList.contains('hidden')) { loadGlobalComments(); } else if (currentUser) { checkNewMessages(); }
         }, 4000);
+
+        // Fermer le sélecteur si on clique ailleurs
+        window.addEventListener('mousedown', (e) => {
+            const picker = document.getElementById('emoji-picker');
+            if (!picker.contains(e.target) && !e.target.classList.contains('reaction-trigger')) {
+                picker.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>
