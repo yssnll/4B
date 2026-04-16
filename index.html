@@ -182,15 +182,18 @@
             bottom: -10px;
             right: 0;
             display: flex;
-            gap: 2px;
-            background: rgba(255,255,255,0.8);
+            gap: 4px;
+            background: rgba(255,255,255,0.9);
             backdrop-filter: blur(5px);
-            padding: 2px 5px;
+            padding: 2px 6px;
             border-radius: 10px;
             border: 1px solid rgba(255,255,255,0.5);
             font-size: 12px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
+        .reaction-item { cursor: pointer; transition: transform 0.1s; }
+        .reaction-item:hover { transform: scale(1.3); }
+
         .emoji-picker {
             position: fixed;
             z-index: 1000;
@@ -482,7 +485,7 @@
         let localVuesIds = []; 
         let replyToMsg = null;
         let allMessagesCache = [];
-        let reactionTargetId = null; // Cible pour la réaction
+        let reactionTargetId = null;
 
         window.onload = () => { 
             const today = new Date().toISOString().split('T')[0];
@@ -871,12 +874,36 @@
                 try { reactions = JSON.parse(reactMatch[1]); } catch(e) {}
             }
 
-            // Ajoute ou incrémente l'emoji
             if (!reactions[emoji]) reactions[emoji] = 0;
             reactions[emoji]++;
 
             let cleanMsg = msg.message.replace(/\[REACTIONS:({.*?})\]/, "");
             const newMsg = cleanMsg + `[REACTIONS:${JSON.stringify(reactions)}]`;
+
+            await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
+            loadGlobalComments();
+        }
+
+        async function removeReaction(msgId, emoji) {
+            const msg = allMessagesCache.find(m => m.id === msgId);
+            if (!msg) return;
+
+            let reactions = {};
+            const reactMatch = msg.message.match(/\[REACTIONS:({.*?})\]/);
+            if (reactMatch) {
+                try { reactions = JSON.parse(reactMatch[1]); } catch(e) {}
+            }
+
+            if (reactions[emoji]) {
+                reactions[emoji]--;
+                if (reactions[emoji] <= 0) delete reactions[emoji];
+            }
+
+            let cleanMsg = msg.message.replace(/\[REACTIONS:({.*?})\]/, "");
+            let newMsg = cleanMsg;
+            if (Object.keys(reactions).length > 0) {
+                newMsg += `[REACTIONS:${JSON.stringify(reactions)}]`;
+            }
 
             await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
             loadGlobalComments();
@@ -926,7 +953,6 @@
                     }
                 }
 
-                // Extraction des réactions
                 let reactionsHtml = "";
                 const reactMatch = rawMsg.match(/\[REACTIONS:({.*?})\]/);
                 if (reactMatch) {
@@ -934,7 +960,7 @@
                         const reactions = JSON.parse(reactMatch[1]);
                         reactionsHtml = `<div class="reactions-container">`;
                         for (const [emoji, count] of Object.entries(reactions)) {
-                            reactionsHtml += `<span>${emoji}${count > 1 ? count : ''}</span>`;
+                            reactionsHtml += `<span class="reaction-item" onclick="removeReaction(${c.id}, '${emoji}')">${emoji}${count > 1 ? count : ''}</span>`;
                         }
                         reactionsHtml += `</div>`;
                         rawMsg = rawMsg.replace(/\[REACTIONS:({.*?})\]/, "");
@@ -964,7 +990,6 @@
                         <div class="flex items-center gap-2 max-w-full ${isMe ? 'flex-row-reverse' : 'flex-row'}">
                             <div class="group relative flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1">
                                 <div class="reaction-trigger" onclick="openEmojiPicker(${c.id}, event)">👀</div>
-
                                 <div class="msg-actions flex gap-2">
                                     <button onclick="initiateReply(${c.id}, '${escapeHTML(c.auteur).replace(/'/g, "\\'")}', '${escapeHTML(msgText).replace(/'/g, "\\'")}')" class="bg-white/60 p-1 rounded text-blue-600 text-[9px] font-black">RÉPONDRE</button>
                                     ${isAdmin ? `<button onclick="togglePin(${c.id}, ${c.is_pinned}, '${c.auteur}')" class="bg-amber-100 p-1 rounded text-amber-600 text-[9px] font-black">📌</button>` : ''}
@@ -1137,7 +1162,6 @@
             if (!document.getElementById('chat-modal').classList.contains('hidden')) { loadGlobalComments(); } else if (currentUser) { checkNewMessages(); }
         }, 4000);
 
-        // Fermer le sélecteur si on clique ailleurs
         window.addEventListener('mousedown', (e) => {
             const picker = document.getElementById('emoji-picker');
             if (!picker.contains(e.target) && !e.target.classList.contains('reaction-trigger')) {
