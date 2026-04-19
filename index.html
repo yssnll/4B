@@ -867,8 +867,38 @@
                 }).join('');
             }
 
-            function dismissBellNotif(id) { locallyDismissedIds.push(id); renderBellNotifs(); updateBellUI(); }
-            function dismissAllBellNotifs() { privateUnreadList.forEach(n => { if(!locallyDismissedIds.includes(n.id)) locallyDismissedIds.push(n.id); }); renderBellNotifs(); updateBellUI(); }
+            function dismissBellNotif(id) { 
+                // ✅ Marquer comme vu + supprimer de la base
+                (async () => {
+                    await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
+                    await _supabase.from('commentaires').delete().eq('id', id);
+                    
+                    locallyDismissedIds.push(id); 
+                    localVuesIds.push(id);
+                    
+                    // ✅ Attendre un peu pour que la sync soit complète
+                    await new Promise(r => setTimeout(r, 200));
+                    await checkNewMessages();
+                })();
+            }
+            function dismissAllBellNotifs() { 
+                // ✅ Marquer tous comme vus + supprimer
+                (async () => {
+                    for (const n of privateUnreadList) {
+                        await _supabase.from('vues_messages').upsert([{ message_id: n.id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
+                        localVuesIds.push(n.id);
+                        
+                        if (n.message && n.message.includes('[SYSTEM_TAG]')) {
+                            await _supabase.from('commentaires').delete().eq('id', n.id);
+                        }
+                        if(!locallyDismissedIds.includes(n.id)) locallyDismissedIds.push(n.id); 
+                    }
+                    
+                    // ✅ Attendre un peu pour que la sync soit complète
+                    await new Promise(r => setTimeout(r, 200));
+                    await checkNewMessages();
+                })();
+            }
 
             function updateBellUI() {
                 const count = privateUnreadList.filter(n => !locallyDismissedIds.includes(n.id)).length;
@@ -895,7 +925,7 @@
                     .neq('auteur_id', currentUserId);
 
                 const filteredPriv = privMsgs?.filter(m => {
-                    const tagMatch = m.message.match(/\[PRIV_ID:(\d+):(\d+)\]/);
+                    const tagMatch = m.message.match(/\[PRIV_ID:([^:]+):([^\]]+)\]/);
                     if (!tagMatch) return false;
                     return tagMatch[1] === String(currentUserId) || tagMatch[2] === String(currentUserId);
                 }) || [];
@@ -905,10 +935,12 @@
                 // Marquer les notifications de réaction comme lues (dismissed) quand on ouvre le chat privé
                 if (currentChatType === "private") {
                     privateUnreadList.forEach(m => {
-                        if (m.message && (m.message.includes('[SYSTEM_TAG]') || m.message.includes('[PRIV_ID'))) {
-                            if (!locallyDismissedIds.includes(m.id)) {
-                                locallyDismissedIds.push(m.id);
-                            }
+                        if (m.message && m.message.includes('[SYSTEM_TAG]')) {
+                            // ✅ Supprimer les messages système de réaction automatiquement
+                            _supabase.from('commentaires').delete().eq('id', m.id);
+                        }
+                        if (!locallyDismissedIds.includes(m.id)) {
+                            locallyDismissedIds.push(m.id);
                         }
                     });
                 }
@@ -1016,41 +1048,9 @@
                     const newMsg = cleanMsg + `[REACTIONS:${JSON.stringify(reactions)}]`;
 
                     await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
-                    showToast(`${currentUser} a ajouté une réaction ${emoji}`);
-
-                    let systemMsg = `[SYSTEM_TAG] ${currentUser} a ajouté une réaction ${emoji}`;
-                    let privateTag = null;
-                    if (msg.message.includes('[PRIV_ID')) {
-                        const privTag = msg.message.match(/\[PRIV_ID:([^\]]+)\]/);
-                        if (privTag) {
-                            privateTag = privTag[1];
-                            systemMsg = `[PRIV_ID:${privateTag}][SYSTEM_TAG]  ${currentUser} a ajouté une réaction ${emoji}`;
-                        }
-                    }
-
-                    let fallbackSystemMsg = null;
-                    try {
-                        await _supabase.from('commentaires').insert([{
-                            auteur: currentUser,
-                            auteur_id: currentUserId,
-                            message: systemMsg,
-                            file_url: null
-                        }]);
-                    } catch (e) {
-                        console.warn('Impossible de persister le message système de réaction :', e);
-                        fallbackSystemMsg = systemMsg;
-                    }
-
+                    
+                    // ✅ Plus de notif système - juste afficher la réaction sur le message
                     await loadGlobalComments();
-                    if (fallbackSystemMsg) {
-                        tempSystemMessages.push({
-                            id: `temp-${Date.now()}-${Math.random()}`,
-                            message: fallbackSystemMsg,
-                            chatType: currentChatType,
-                            privateTag: privateTag
-                        });
-                        loadGlobalComments();
-                    }
                 } catch (e) {
                     console.error('Erreur lors de l’ajout de la réaction :', e);
                     showToast('Impossible d’ajouter la réaction.');
@@ -1261,6 +1261,12 @@
                 if (!currentUser || localVuesIds.includes(id)) return; 
                 localVuesIds.push(id); 
                 await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' }); 
+                
+                // ✅ Supprimer les messages système de réaction une fois vus
+                const msg = allMessagesCache.find(m => m.id === id);
+                if (msg && msg.message.includes('[SYSTEM_TAG]')) {
+                    await _supabase.from('commentaires').delete().eq('id', id);
+                }
             }
 
             async function editComment(id, old) {
