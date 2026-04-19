@@ -901,6 +901,18 @@
                 }) || [];
 
                 privateUnreadList = filteredPriv.filter(m => !vuesIds.includes(m.id));
+
+                // Marquer les notifications de réaction comme lues (dismissed) quand on ouvre le chat privé
+                if (currentChatType === "private") {
+                    privateUnreadList.forEach(m => {
+                        if (m.message && (m.message.includes('[SYSTEM_TAG]') || m.message.includes('[PRIV_ID'))) {
+                            if (!locallyDismissedIds.includes(m.id)) {
+                                locallyDismissedIds.push(m.id);
+                            }
+                        }
+                    });
+                }
+
                 updateBellUI();
             }
 
