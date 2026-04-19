@@ -259,7 +259,7 @@
                         🔔
                         <span id="bell-count" class="hidden absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-black w-5 h-5 rounded-full border-2 border-red-600 flex items-center justify-center">0</span>
                     </button>
-                    <button onclick="openChatList()" class="relative bg-white text-gray-800 px-5 py-2 rounded-full font-bold shadow-lg hover:bg-gray-50 transition-all border border-gray-200">
+                    <button id="btn-private-chat" onclick="openChatList()" class="relative bg-white text-gray-800 px-5 py-2 rounded-full font-bold shadow-lg hover:bg-gray-50 transition-all border border-gray-200">
                         <span>💬 Messages Privés</span>
                         <div id="assistance-notif" class="notification-dot"></div>
                     </button>
@@ -585,6 +585,26 @@
                     document.getElementById('main-content').classList.remove('hidden');
                     if(currentUser === "Yassine El") { document.getElementById('btn-config-yassine').classList.remove('hidden'); }
                     if(data.has_panel_access || currentUser === "Yassine El") document.getElementById('btn-panel-membres').classList.remove('hidden');
+                    // --- AJOUT : Gestion de l'affichage du chat privé et de sa notification ---
+                    if (data.has_private_access === false && currentUser !== "Yassine El") {
+                        // On cache le bouton
+                        document.getElementById('btn-private-chat').style.display = 'none';
+                        
+                        // On cache aussi la notification spécifique du chat si elle existe
+                        const chatNotif = document.getElementById('assistance-notif');
+                        if (chatNotif) chatNotif.style.display = 'none';
+                        
+                        // On cache la cloche des notifications
+                        document.getElementById('notif-bell').style.display = 'none';
+                    } else {
+                        // On affiche le bouton
+                        document.getElementById('btn-private-chat').style.display = 'flex';
+                        // La notification se gérera normalement avec le reste du script
+                        
+                        // On affiche la cloche des notifications
+                        document.getElementById('notif-bell').style.display = 'flex';
+                    }
+                    // ----------------------------------------------------
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
                 } else { alert("Identifiants incorrects !"); }
@@ -646,6 +666,8 @@
                             <label class="flex items-center gap-1 cursor-pointer bg-green-50 px-2 py-1 rounded-lg">
                                 <input type="checkbox" ${u.can_view_passwords ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'can_view_passwords', this.checked)"> VOIR MDP
                             </label>
+                            <label class="flex items-center gap-1 cursor-pointer bg-purple-50 px-2 py-1 rounded-lg">
+                                <input type="checkbox" ${u.has_private_access !== false ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'has_private_access', this.checked)"> MESSAGES PRIVÉS</label>
                         </div>
                     </div>
                 `).join('');
