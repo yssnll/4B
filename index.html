@@ -81,6 +81,34 @@
                 border-radius: 50%;
                 display: none;
             }
+            #toast-container {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-end;
+                z-index: 1200;
+                pointer-events: none;
+            }
+            .toast-item {
+                background: rgba(15, 23, 42, 0.92);
+                color: white;
+                padding: 12px 16px;
+                border-radius: 14px;
+                box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+                max-width: 320px;
+                font-size: 13px;
+                line-height: 1.4;
+                opacity: 0;
+                transform: translateY(12px);
+                animation: toastIn 0.22s forwards;
+                pointer-events: auto;
+            }
+            .toast-item.fade-out { animation: toastOut 0.2s forwards; }
+            @keyframes toastIn { to { opacity: 1; transform: translateY(0); } }
+            @keyframes toastOut { to { opacity: 0; transform: translateY(12px); } }
             .msg-actions { opacity: 0; transition: opacity 0.2s; }
             .group:hover .msg-actions { opacity: 1; }
             
@@ -456,6 +484,8 @@
             </div>
         </div>
 
+        <div id="toast-container"></div>
+
         <script>
             const SUPABASE_URL = 'https://lujaxaeecbntqprpilfq.supabase.co';
             const SUPABASE_KEY = 'sb_publishable_Eu4HsA9a-QVmsfB8jQurrA_P4S70Nbr';
@@ -503,6 +533,7 @@
             let replyToMsg = null;
             let allMessagesCache = [];
             let reactionTargetId = null;
+            let tempSystemMessages = [];
 
             const extraEmojisList = ['💯','✨','🚀','💡','💣','🔒','💩','👻','💀','👽','🤖','🎃','🫶','🤌','👀','🧠','💥','🎉','🏆','🤔','😎','🥳','😡','🤯','🤮'];
 
@@ -530,6 +561,31 @@
                 const div = document.createElement('div');
                 div.textContent = str;
                 return div.innerHTML;
+            }
+
+            function showToast(text) {
+                const container = document.getElementById('toast-container');
+                if (!container) return;
+                const toast = document.createElement('div');
+                toast.className = 'toast-item';
+                toast.textContent = text;
+                container.appendChild(toast);
+                setTimeout(() => {
+                    toast.classList.add('fade-out');
+                }, 2200);
+                setTimeout(() => {
+                    toast.remove();
+                }, 2500);
+            }
+
+            function showSystemMessage(text) {
+                const cont = document.getElementById('global-comments-container');
+                if (!cont) return;
+                const msg = document.createElement('div');
+                msg.className = 'system-msg-box modal-animate';
+                msg.textContent = text;
+                cont.appendChild(msg);
+                cont.scrollTop = cont.scrollHeight;
             }
 
             function extractUrl(text) {
@@ -925,36 +981,68 @@
                 const msg = allMessagesCache.find(m => m.id === reactionTargetId);
                 if (!msg) return;
 
-                let reactions = {};
-                const reactMatch = msg.message.match(/\[REACTIONS:({.*?})\]/);
-                if (reactMatch) {
-                    try { reactions = JSON.parse(reactMatch[1]); } catch(e) {}
+                try {
+                    let reactions = {};
+                    const reactMatch = msg.message.match(/\[REACTIONS:({.*?})\]/);
+                    if (reactMatch) {
+                        try { reactions = JSON.parse(reactMatch[1]); } catch(e) {}
+                    }
+
+                    // Structure avec tableau pour savoir QUI a réagi
+                    if (!reactions[emoji]) reactions[emoji] = [];
+                    // Rétrocompatibilité avec les anciens messages qui utilisaient un simple chiffre
+                    else if (typeof reactions[emoji] === 'number') reactions[emoji] = Array(reactions[emoji]).fill("inconnu");
+
+                    // Si l'utilisateur n'a pas encore mis cet émoji
+                    if (!reactions[emoji].includes(currentUserId)) {
+                        reactions[emoji].push(currentUserId);
+                    } else {
+                        return; // Il l'a déjà mis
+                    }
+
+                    let cleanMsg = msg.message.replace(/\[REACTIONS:({.*?})\]/, "");
+                    const newMsg = cleanMsg + `[REACTIONS:${JSON.stringify(reactions)}]`;
+
+                    await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
+                    showToast(`${currentUser} a ajouté une réaction ${emoji}`);
+
+                    let systemMsg = `[SYSTEM_TAG] ${currentUser} a ajouté une réaction ${emoji}`;
+                    let privateTag = null;
+                    if (msg.message.includes('[PRIV_ID')) {
+                        const privTag = msg.message.match(/\[PRIV_ID:([^\]]+)\]/);
+                        if (privTag) {
+                            privateTag = privTag[1];
+                            systemMsg = `[PRIV_ID:${privateTag}][SYSTEM_TAG]  ${currentUser} a ajouté une réaction ${emoji}`;
+                        }
+                    }
+
+                    let fallbackSystemMsg = null;
+                    try {
+                        await _supabase.from('commentaires').insert([{
+                            auteur: currentUser,
+                            auteur_id: currentUserId,
+                            message: systemMsg,
+                            file_url: null
+                        }]);
+                    } catch (e) {
+                        console.warn('Impossible de persister le message système de réaction :', e);
+                        fallbackSystemMsg = systemMsg;
+                    }
+
+                    await loadGlobalComments();
+                    if (fallbackSystemMsg) {
+                        tempSystemMessages.push({
+                            id: `temp-${Date.now()}-${Math.random()}`,
+                            message: fallbackSystemMsg,
+                            chatType: currentChatType,
+                            privateTag: privateTag
+                        });
+                        loadGlobalComments();
+                    }
+                } catch (e) {
+                    console.error('Erreur lors de l’ajout de la réaction :', e);
+                    showToast('Impossible d’ajouter la réaction.');
                 }
-
-                // Structure avec tableau pour savoir QUI a réagi
-                if (!reactions[emoji]) reactions[emoji] = [];
-                // Rétrocompatibilité avec les anciens messages qui utilisaient un simple chiffre
-                else if (typeof reactions[emoji] === 'number') reactions[emoji] = Array(reactions[emoji]).fill("inconnu");
-
-                // Si l'utilisateur n'a pas encore mis cet émoji
-                if (!reactions[emoji].includes(currentUserId)) {
-                    reactions[emoji].push(currentUserId);
-                } else {
-                    return; // Il l'a déjà mis
-                }
-
-                let cleanMsg = msg.message.replace(/\[REACTIONS:({.*?})\]/, "");
-                const newMsg = cleanMsg + `[REACTIONS:${JSON.stringify(reactions)}]`;
-
-                await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
-                
-                // Notification Système à l'auteur du message (sauf si on réagit à soi-même)
-                if (msg.auteur_id !== currentUserId) {
-                    const notifMsg = `[PRIV_ID:${msg.auteur_id}:${msg.auteur_id}][SYSTEM_TAG] 🔔 ${currentUser} a réagi avec ${emoji} à votre message.`;
-                    await _supabase.from('commentaires').insert([{ auteur: "Notifications", auteur_id: "notif-system", message: notifMsg }]);
-                }
-
-                loadGlobalComments();
             }
 
             async function removeReaction(msgId, emoji) {
@@ -994,6 +1082,23 @@
                 }
 
                 await _supabase.from('commentaires').update({ message: newMsg }).eq('id', msg.id);
+
+                // Supprimer le message système de réaction si c'était la dernière réaction de cet émoji pour cet utilisateur
+                const systemPattern = `%${currentUser} a ajouté une réaction ${emoji}%`;
+                let deleteQuery = _supabase.from('commentaires').select('id').like('message', systemPattern);
+                if (currentChatType === 'private') {
+                    const tag = getPrivateTag(currentUserId, assistanceTargetId);
+                    deleteQuery = deleteQuery.like('message', `${tag}%`);
+                } else {
+                    deleteQuery = deleteQuery.not('message', 'like', '[PRIV_ID:%');
+                }
+                const { data: sysMsgs } = await deleteQuery;
+                if (sysMsgs && sysMsgs.length > 0) {
+                    // Supprimer le plus récent (au cas où il y en aurait plusieurs, mais normalement un seul)
+                    const sysMsgId = sysMsgs[sysMsgs.length - 1].id;
+                    await _supabase.from('commentaires').delete().eq('id', sysMsgId);
+                }
+
                 loadGlobalComments();
             }
 
@@ -1017,15 +1122,33 @@
 
                 let html = ""; let lastAid = "";
                 msgs.forEach(c => {
-                    if (c.message && c.message.startsWith("[SYSTEM_TAG]")) {
-                        html += `<div class="system-msg-box">${escapeHTML(c.message.replace("[SYSTEM_TAG] ", ""))}</div>`;
-                        lastAid = "system";
-                        return;
+                    if (c.message) {
+                        const sysMatch = c.message.match(/^\[SYSTEM_TAG\]\s*(.*)$/);
+                        const privateSysMatch = c.message.match(/^\[PRIV_ID:([^\]]+)\]\[SYSTEM_TAG\]\s*(.*)$/);
+                        if (sysMatch) {
+                            html += `<div class="system-msg-box">${escapeHTML(sysMatch[1])}</div>`;
+                            lastAid = "system";
+                            return;
+                        }
+                        if (privateSysMatch) {
+                            html += `<div class="system-msg-box">${escapeHTML(privateSysMatch[2])}</div>`;
+                            lastAid = "system";
+                            return;
+                        }
                     }
 
                     const isMe = String(c.auteur_id) === String(currentUserId);
                     const same = c.auteur_id === lastAid;
                     
+                    const sysMatch = c.message?.match(/^\[SYSTEM_TAG\]\s*(.*)$/);
+                    const privateSysMatch = c.message?.match(/^\[PRIV_ID:([^\]]+)\]\[SYSTEM_TAG\]\s*(.*)$/);
+                    if (sysMatch || privateSysMatch) {
+                        const systemText = sysMatch ? sysMatch[1] : privateSysMatch[2];
+                        html += `<div class="system-msg-box">${escapeHTML(systemText)}</div>`;
+                        lastAid = "system";
+                        return;
+                    }
+
                     let rawMsg = c.message || "";
                     rawMsg = rawMsg.replace(/\[PRIV_ID:.*?\]/, "");
                     
@@ -1110,6 +1233,15 @@
                         </div>`;
                     lastAid = c.auteur_id;
                 });
+
+                const tempTag = currentChatType === 'private' ? getPrivateTag(currentUserId, assistanceTargetId) : null;
+                tempSystemMessages.forEach(t => {
+                    if (t.chatType !== currentChatType) return;
+                    if (currentChatType === 'private' && t.privateTag !== tempTag) return;
+                    if (currentChatType === 'general' && t.privateTag) return;
+                    html += `<div class="system-msg-box">${escapeHTML(t.message.replace('[SYSTEM_TAG] ', ''))}</div>`;
+                });
+
                 cont.innerHTML = html; if (isFirst || isBottom) cont.scrollTop = cont.scrollHeight;
             }
 
