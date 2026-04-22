@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
         <meta charset="UTF-8">
@@ -549,7 +549,7 @@
                 const eyeIcon = document.getElementById('eye-icon');
                 if (pwdInput.type === "password") {
                     pwdInput.type = "text";
-                    eyeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />`;
+                    eyeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />`;
                 } else {
                     pwdInput.type = "password";
                     eyeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12.451a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />`;
@@ -682,6 +682,19 @@
                             typingTimeout = setTimeout(() => { indicator.innerHTML = ""; }, 2000);
                         }
                     })
+                    .on('broadcast', { event: 'private-access-changed' }, (payload) => {
+                        const { userId, value } = payload.payload;
+                        // Si c'est pour l'utilisateur actuel, recharger la liste des messages privés
+                        if (String(userId) === String(currentUserId) && !value) {
+                            // Si l'accès aux messages privés est retiré, fermer le modal et recharger
+                            document.getElementById('chat-list-modal').classList.add('hidden');
+                            document.getElementById('btn-private-chat').style.display = 'none';
+                        }
+                        // Recharger la liste si le modal est ouvert
+                        if (!document.getElementById('chat-list-modal').classList.contains('hidden')) {
+                            openChatList();
+                        }
+                    })
                     .subscribe();
             }
 
@@ -723,7 +736,11 @@
                                 <input type="checkbox" ${u.can_view_passwords ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'can_view_passwords', this.checked)"> VOIR MDP
                             </label>
                             <label class="flex items-center gap-1 cursor-pointer bg-purple-50 px-2 py-1 rounded-lg">
-                                <input type="checkbox" ${u.has_private_access !== false ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'has_private_access', this.checked)"> MESSAGES PRIVÉS</label>
+                                <input type="checkbox" ${u.has_private_access !== false ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'has_private_access', this.checked)"> MESSAGES PRIVÉS
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer bg-cyan-50 px-2 py-1 rounded-lg">
+                                <input type="checkbox" ${u.show_read_receipts !== false ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'show_read_receipts', this.checked)"> VUE
+                            </label>
                         </div>
                     </div>
                 `).join('');
@@ -731,7 +748,12 @@
 
             async function updateUserRight(userId, field, value) {
                 await _supabase.from('utilisateurs').update({ [field]: value }).eq('id', userId);
-                if(String(userId) === String(currentUserId) && field === 'can_view_passwords') canViewPasswordsGlobal = value;
+                if (field === 'has_private_access') {
+                    notifyPrivateChatUpdate();
+                }
+                if (String(userId) === String(currentUserId) && field === 'can_view_passwords') {
+                    canViewPasswordsGlobal = value;
+                }
             }
 
             function closeConfigPanel() { document.getElementById('config-modal').classList.add('hidden'); }
@@ -810,7 +832,7 @@
             async function openChatList() {
                 document.getElementById('assistance-notif').style.display = 'none';
                 document.getElementById('chat-list-modal').classList.remove('hidden');
-                const { data: users } = await _supabase.from('utilisateurs').select('id, pseudo').neq('id', currentUserId).order('pseudo');
+                const { data: users } = await _supabase.from('utilisateurs').select('id, pseudo, has_private_access').neq('id', currentUserId).eq('has_private_access', true).order('pseudo');
                 const { data: userVues } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
                 const userVuesIds = [...(userVues?.map(v => v.message_id) || []), ...localVuesIds];
                 
@@ -1121,7 +1143,7 @@
                 const { data: vuesServ } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
                 const vuesIds = [...(vuesServ?.map(v => v.message_id) || []), ...localVuesIds];
                 
-                let query = _supabase.from('commentaires').select('*, vues_messages(user_pseudo)').is('devoir_id', null);
+                let query = _supabase.from('commentaires').select('*, vues_messages(user_pseudo), utilisateurs!auteur_id(show_read_receipts)').is('devoir_id', null);
                 if (!isHistoryMode) { query = query.eq('is_deleted', false); }
                 if (forcedTag) { query = query.like('message', `${forcedTag}%`); } 
                 else if (currentChatType === "private") { const tag = getPrivateTag(currentUserId, assistanceTargetId); query = query.like('message', `${tag}%`); } 
@@ -1198,7 +1220,8 @@
 
                     const msgText = rawMsg;
                     const detectedUrl = extractUrl(msgText);
-                    const vStr = c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El").map(v => v.user_pseudo).join(', ') || "";
+                    const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
+                    const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El").map(v => v.user_pseudo).join(', ') || "" : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                     const d = new Date(c.created_at);
                     const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
