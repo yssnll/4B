@@ -1143,6 +1143,11 @@
                 const { data: vuesServ } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
                 const vuesIds = [...(vuesServ?.map(v => v.message_id) || []), ...localVuesIds];
                 
+                // Récupérer les infos des utilisateurs pour filtrer les vues
+                const { data: allUsers } = await _supabase.from('utilisateurs').select('pseudo, show_read_receipts');
+                const userShowReadMap = {};
+                allUsers?.forEach(u => { userShowReadMap[u.pseudo] = u.show_read_receipts !== false; });
+                
                 let query = _supabase.from('commentaires').select('*, vues_messages(user_pseudo), utilisateurs!auteur_id(show_read_receipts)').is('devoir_id', null);
                 if (!isHistoryMode) { query = query.eq('is_deleted', false); }
                 if (forcedTag) { query = query.like('message', `${forcedTag}%`); } 
@@ -1221,7 +1226,7 @@
                     const msgText = rawMsg;
                     const detectedUrl = extractUrl(msgText);
                     const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
-                    const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El").map(v => v.user_pseudo).join(', ') || "" : "";
+                    const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El" && userShowReadMap[v.user_pseudo] !== false).map(v => v.user_pseudo).join(', ') || "" : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                     const d = new Date(c.created_at);
                     const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
