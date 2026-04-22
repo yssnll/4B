@@ -1441,8 +1441,13 @@
             }
 
             setInterval(() => { 
-                if (!document.getElementById('chat-modal').classList.contains('hidden')) { loadGlobalComments(); } else if (currentUser) { checkNewMessages(); }
-            }, 4000);
+                if (currentUser) {
+                    checkNewMessages();
+                    if (!document.getElementById('chat-modal').classList.contains('hidden')) { 
+                        loadGlobalComments(); 
+                    }
+                }
+            }, 2000);
 
             window.addEventListener('mousedown', (e) => {
                 const picker = document.getElementById('emoji-picker');
