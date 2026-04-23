@@ -563,6 +563,14 @@
                 return div.innerHTML;
             }
 
+            function formatTimeWithDay(dateString) {
+                const d = new Date(dateString);
+                const days = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+                const dayAbbr = days[d.getDay()];
+                const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                return `${dayAbbr} ${time}`;
+            }
+
             function showToast(text) {
                 const container = document.getElementById('toast-container');
                 if (!container) return;
@@ -1228,8 +1236,7 @@
                     const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
                     const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El" && userShowReadMap[v.user_pseudo] !== false).map(v => v.user_pseudo).join(', ') || "" : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
-                    const d = new Date(c.created_at);
-                    const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    const time = formatTimeWithDay(c.created_at);
                     if(!isMe && !vuesIds.includes(c.id)) markAsSeen(c.id);
                     
                     let fileHtml = "";
