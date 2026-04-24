@@ -711,20 +711,12 @@
             }
 
             function setupMessageListener() {
-                messageChannel = _supabase.channel('realtime-comments')
-                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commentaires' }, async (payload) => {
-                        const newMsg = payload.new;
-                        
-                        // Vérifier si ce message est un message privé destiné à l'utilisateur actuel
-                        const isPrivateMsg = newMsg.message?.includes(`[PRIV_ID:`) && newMsg.message?.includes(`${currentUserId}`);
-                        const isFromOtherUser = String(newMsg.auteur_id) !== String(currentUserId);
-                        
-                        // Si c'est un message privé pour moi, mettre à jour les notifs immédiatement
-                        if (isPrivateMsg && isFromOtherUser) {
-                            await checkNewMessages();
-                        }
-                    })
-                    .subscribe();
+                // Polling toutes les 2 secondes pour vérifier les nouveaux messages
+                setInterval(async () => {
+                    if (currentUser && !document.getElementById('mute-screen').style.display) {
+                        await checkNewMessages();
+                    }
+                }, 2000);
             }
 
             function handleTyping() {
