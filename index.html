@@ -674,6 +674,8 @@
                 } else { alert("Identifiants incorrects !"); }
             }
 
+            let messageChannel;
+
             function setupTypingListener() {
                 typingChannel = _supabase.channel('typing-indicator', { configs: { broadcast: { self: false } } })
                     .on('broadcast', { event: 'typing' }, (payload) => {
@@ -701,6 +703,25 @@
                         // Recharger la liste si le modal est ouvert
                         if (!document.getElementById('chat-list-modal').classList.contains('hidden')) {
                             openChatList();
+                        }
+                    })
+                    .subscribe();
+
+                setupMessageListener();
+            }
+
+            function setupMessageListener() {
+                messageChannel = _supabase.channel('realtime-comments')
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commentaires' }, async (payload) => {
+                        const newMsg = payload.new;
+                        
+                        // Vérifier si ce message est un message privé destiné à l'utilisateur actuel
+                        const isPrivateMsg = newMsg.message?.includes(`[PRIV_ID:`) && newMsg.message?.includes(`${currentUserId}`);
+                        const isFromOtherUser = String(newMsg.auteur_id) !== String(currentUserId);
+                        
+                        // Si c'est un message privé pour moi, mettre à jour les notifs immédiatement
+                        if (isPrivateMsg && isFromOtherUser) {
+                            await checkNewMessages();
                         }
                     })
                     .subscribe();
