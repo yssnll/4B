@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -248,6 +249,155 @@
                 gap: 6px;
                 text-align: center;
             }
+
+            /* ===== AGENT IA ===== */
+            #ai-fab {
+                position: fixed;
+                bottom: 28px;
+                left: 28px;
+                z-index: 600;
+                width: 56px;
+                height: 56px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #6d28d9, #a78bfa);
+                color: white;
+                font-size: 24px;
+                border: none;
+                cursor: pointer;
+                box-shadow: 0 8px 28px rgba(109, 40, 217, 0.5);
+                transition: all 0.3s ease;
+                display: none;
+                align-items: center;
+                justify-content: center;
+            }
+            #ai-fab:hover { transform: scale(1.1); box-shadow: 0 12px 36px rgba(109, 40, 217, 0.6); }
+            #ai-fab.visible { display: flex; }
+
+            #ai-panel {
+                position: fixed;
+                top: 0; right: 0; bottom: 0;
+                width: 400px;
+                max-width: 100vw;
+                z-index: 550;
+                display: flex;
+                flex-direction: column;
+                background: rgba(255, 255, 255, 0.6);
+                backdrop-filter: blur(30px);
+                -webkit-backdrop-filter: blur(30px);
+                border-left: 1px solid rgba(255, 255, 255, 0.55);
+                box-shadow: -12px 0 48px rgba(0, 0, 0, 0.12);
+                transform: translateX(100%);
+                transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            #ai-panel.open { transform: translateX(0); }
+
+            #ai-panel-header {
+                padding: 18px 20px;
+                border-bottom: 1px solid rgba(255,255,255,0.4);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: rgba(109, 40, 217, 0.08);
+            }
+
+            #ai-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 18px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .ai-msg-user {
+                align-self: flex-end;
+                background: var(--primary-color);
+                color: white;
+                padding: 10px 14px;
+                border-radius: 18px 18px 4px 18px;
+                max-width: 86%;
+                font-size: 13px;
+                line-height: 1.5;
+                word-break: break-word;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            }
+            .ai-msg-bot {
+                align-self: flex-start;
+                background: rgba(255, 255, 255, 0.82);
+                color: #1e293b;
+                padding: 10px 14px;
+                border-radius: 18px 18px 18px 4px;
+                max-width: 86%;
+                font-size: 13px;
+                line-height: 1.7;
+                word-break: break-word;
+                border: 1px solid rgba(255,255,255,0.7);
+                white-space: pre-wrap;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            }
+            .ai-msg-bot.thinking {
+                color: #94a3b8;
+                font-style: italic;
+                animation: ai-pulse 1s infinite;
+            }
+            .ai-msg-action {
+                align-self: center;
+                background: rgba(109, 40, 217, 0.08);
+                color: #6d28d9;
+                padding: 6px 14px;
+                border-radius: 20px;
+                font-size: 11px;
+                font-weight: 700;
+                border: 1px solid rgba(109,40,217,0.2);
+            }
+            @keyframes ai-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+            #ai-input-area {
+                padding: 14px 16px;
+                border-top: 1px solid rgba(255,255,255,0.4);
+                display: flex;
+                gap: 10px;
+                align-items: flex-end;
+                background: rgba(255,255,255,0.2);
+            }
+            #ai-input {
+                flex: 1;
+                padding: 10px 14px;
+                border-radius: 18px;
+                border: 1px solid rgba(255,255,255,0.6);
+                background: rgba(255,255,255,0.7);
+                backdrop-filter: blur(10px);
+                outline: none;
+                font-size: 13px;
+                font-family: 'Plus Jakarta Sans', sans-serif;
+                resize: none;
+                max-height: 100px;
+                min-height: 40px;
+            }
+            #ai-send-btn {
+                width: 40px; height: 40px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #6d28d9, #a78bfa);
+                color: white;
+                border: none;
+                font-size: 16px;
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: all 0.2s;
+                display: flex; align-items: center; justify-content: center;
+            }
+            #ai-send-btn:hover { transform: scale(1.08); }
+
+            #ai-key-modal {
+                position: fixed;
+                inset: 0;
+                z-index: 700;
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+                background: rgba(0,0,0,0.5);
+                backdrop-filter: blur(12px);
+            }
+            #ai-key-modal:not(.hidden) { display: flex; }
         </style>
     </head>
     <body class="p-4 md:p-8">
@@ -490,6 +640,47 @@
 
         <div id="toast-container"></div>
 
+        <!-- BOUTON FLOTTANT AGENT IA -->
+        <button id="ai-fab" onclick="toggleAIPanel()" title="Agent IA">🤖</button>
+
+        <!-- PANNEAU AGENT IA -->
+        <div id="ai-panel">
+            <div id="ai-panel-header">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-purple-300 flex items-center justify-center text-lg">🤖</div>
+                    <div>
+                        <p class="font-black text-purple-900 text-sm">Katbi</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="clearAIConversation()" title="Nouvelle conversation" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-sm hover:bg-white transition-colors">🗑️</button>
+                    <button onclick="openAIKeyModal()" title="Clé API" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-sm hover:bg-white transition-colors">🔑</button>
+                    <button onclick="toggleAIPanel()" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-lg hover:bg-white transition-colors">&times;</button>
+                </div>
+            </div>
+            <div id="ai-messages"></div>
+            <div id="ai-input-area">
+                <textarea id="ai-input" placeholder="Pose une question, demande d'ajouter un devoir, changer le thème..." rows="1"
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAIMessage();}"
+                    oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+                <button id="ai-send-btn" onclick="sendAIMessage()">➤</button>
+            </div>
+        </div>
+
+        <!-- MODAL CLÉ API -->
+        <div id="ai-key-modal" class="hidden">
+            <div class="glass-card w-full max-w-sm p-8 rounded-[2.5rem] modal-animate">
+                <div class="text-center mb-6">
+                    <div class="text-5xl mb-3">🔑</div>
+                    <h2 class="text-2xl font-black text-gray-800">Clé API OpenRouter</h2>
+                    <p class="text-sm text-gray-500 mt-2">Créez un compte gratuit sur <a href="https://openrouter.ai" target="_blank" class="text-purple-600 font-bold underline">openrouter.ai</a>, puis copiez votre clé API ici. L'agent utilisera Grok via OpenRouter.</p>
+                </div>
+                <input type="password" id="ai-key-input" placeholder="sk-or-v1-..." class="w-full p-4 bg-white/80 rounded-2xl outline-none focus:ring-4 ring-purple-200 text-sm font-mono mb-4">
+                <button onclick="saveAIKey()" class="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-400 text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-all">Enregistrer</button>
+                <button onclick="document.getElementById('ai-key-modal').classList.add('hidden')" class="w-full mt-3 py-3 bg-gray-100 rounded-2xl font-bold text-gray-500">Annuler</button>
+            </div>
+        </div>
+
         <script>
             const SUPABASE_URL = 'https://lujaxaeecbntqprpilfq.supabase.co';
             const SUPABASE_KEY = 'sb_publishable_Eu4HsA9a-QVmsfB8jQurrA_P4S70Nbr';
@@ -689,6 +880,9 @@
                     // ----------------------------------------------------
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
+                    if (data.has_ai_access === true || currentUser === "Yassine El") {
+                        document.getElementById('ai-fab').classList.add('visible');
+                    }
                 } else { alert("Identifiants incorrects !"); }
             }
 
@@ -779,6 +973,9 @@
                             </label>
                             <label class="flex items-center gap-1 cursor-pointer bg-cyan-50 px-2 py-1 rounded-lg">
                                 <input type="checkbox" ${u.show_read_receipts !== false ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'show_read_receipts', this.checked)"> VUE
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer bg-violet-50 px-2 py-1 rounded-lg">
+                                <input type="checkbox" ${u.has_ai_access ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'has_ai_access', this.checked)"> KATBI
                             </label>
                         </div>
                     </div>
@@ -1512,6 +1709,393 @@
                     picker.classList.add('hidden');
                 }
             });
+
+            // ===== AGENT IA =====
+            let aiConversation = [];
+            let aiIsThinking = false;
+
+            function toggleAIPanel() {
+                const panel = document.getElementById('ai-panel');
+                panel.classList.toggle('open');
+                if (panel.classList.contains('open') && aiConversation.length === 0) {
+                    aiShowWelcome();
+                }
+            }
+
+            function openAIKeyModal() {
+                const existing = localStorage.getItem('ai_api_key') || '';
+                document.getElementById('ai-key-input').value = existing;
+                document.getElementById('ai-key-modal').classList.remove('hidden');
+            }
+
+            function sanitizeApiKey(raw) {
+                // Supprimer tout caractère non-ASCII imprimable (espaces invisibles, unicode, etc.)
+                return raw.replace(/[^\x20-\x7E]/g, '').trim();
+            }
+
+            function saveAIKey() {
+                const key = sanitizeApiKey(document.getElementById('ai-key-input').value);
+                if (!key) return;
+                localStorage.setItem('ai_api_key', key);
+                document.getElementById('ai-key-modal').classList.add('hidden');
+                showToast('Clé API enregistrée ✓');
+                if (aiConversation.length === 0) aiShowWelcome();
+            }
+
+            function aiShowWelcome() {
+                aiAddBubble('bot', `Salut ${currentUser} ! 👋\nJe suis ton agent IA. Je peux :\n\n• Répondre à toutes tes questions\n• Ajouter ou supprimer des devoirs\n• Changer le thème de l'application\n• Envoyer des messages dans le chat\n• T'aider avec n'importe quoi d'autre\n\nComment puis-je t'aider ?`);
+            }
+
+            function clearAIConversation() {
+                aiConversation = [];
+                document.getElementById('ai-messages').innerHTML = '';
+                aiShowWelcome();
+            }
+
+            function aiAddBubble(type, text, id = null) {
+                const cont = document.getElementById('ai-messages');
+                const div = document.createElement('div');
+                if (type === 'user') div.className = 'ai-msg-user modal-animate';
+                else if (type === 'bot') div.className = 'ai-msg-bot modal-animate';
+                else if (type === 'action') div.className = 'ai-msg-action modal-animate';
+                div.textContent = text;
+                if (id) div.id = id;
+                cont.appendChild(div);
+                cont.scrollTop = cont.scrollHeight;
+                return div;
+            }
+
+            async function sendAIMessage() {
+                if (aiIsThinking) return;
+                const input = document.getElementById('ai-input');
+                const text = input.value.trim();
+                if (!text) return;
+
+                const apiKey = sanitizeApiKey(localStorage.getItem('ai_api_key') || '');
+                if (!apiKey) {
+                    openAIKeyModal();
+                    return;
+                }
+
+                input.value = '';
+                input.style.height = 'auto';
+                aiAddBubble('user', text);
+                aiConversation.push({ role: 'user', content: text });
+
+                aiIsThinking = true;
+                const thinkingEl = aiAddBubble('bot', '...', 'ai-thinking');
+                thinkingEl.classList.add('thinking');
+
+                try {
+                    const systemPrompt = await buildAISystemPrompt();
+
+                    // Format OpenAI-compatible (xAI Grok)
+                    const messages = [
+                        { role: 'system', content: systemPrompt },
+                        ...aiConversation.slice(0, -1),
+                        { role: 'user', content: text }
+                    ];
+
+                    // OpenRouter : CORS activé nativement, accès à Grok depuis le navigateur
+                    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`,
+                            'HTTP-Referer': window.location.href,
+                            'X-Title': 'Agenda 4-B'
+                        },
+                        body: JSON.stringify({
+                            model: 'x-ai/grok-3',
+                            messages: messages,
+                            max_tokens: 1024,
+                            temperature: 0.7
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        const errMsg = data?.error?.message || 'Erreur API';
+                        document.getElementById('ai-thinking')?.remove();
+                        aiAddBubble('bot', `❌ Erreur : ${errMsg}`);
+                        if (errMsg.includes('key') || errMsg.includes('auth') || errMsg.includes('401')) openAIKeyModal();
+                        aiIsThinking = false;
+                        return;
+                    }
+
+                    const rawReply = data.choices?.[0]?.message?.content || '';
+                    aiConversation.push({ role: 'assistant', content: rawReply });
+
+                    // Extraire et exécuter les actions
+                    const actionRegex = /\[ACTION:(\{.*?\})\]/gs;
+                    let displayReply = rawReply.replace(actionRegex, '').trim();
+                    const actions = [...rawReply.matchAll(actionRegex)];
+
+                    document.getElementById('ai-thinking')?.remove();
+                    if (displayReply) aiAddBubble('bot', displayReply);
+
+                    for (const match of actions) {
+                        try {
+                            const action = JSON.parse(match[1]);
+                            await executeAIAction(action);
+                        } catch(e) { console.error('Erreur action IA', e); }
+                    }
+
+                } catch(e) {
+                    document.getElementById('ai-thinking')?.remove();
+                    aiAddBubble('bot', `❌ Erreur réseau : ${e.message}\n\nVérifiez votre connexion internet et votre clé API.`);
+                    console.error('Erreur Agent IA :', e);
+                }
+
+                aiIsThinking = false;
+            }
+
+            async function buildAISystemPrompt() {
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+                // Récupérer les devoirs de la semaine
+                let devoirsInfo = '';
+                try {
+                    const dateVal = document.getElementById('date-selector').value;
+                    const r = getWeekRange(dateVal);
+                    const { data: devs } = await _supabase.from('devoirs').select('*').gte('date_due', r.start).lte('date_due', r.end);
+                    if (devs && devs.length > 0) {
+                        devoirsInfo = devs.map(d => `- ${d.jour} ${d.heure} | ${d.matiere} | ${d.type} : ${d.description}`).join('\n');
+                    } else {
+                        devoirsInfo = 'Aucun devoir cette semaine.';
+                    }
+                } catch(e) { devoirsInfo = 'Non disponible.'; }
+
+                const scheduleStr = Object.entries(schedule).map(([h, cours]) =>
+                    `${h}: Lun=${cours[0]}, Mar=${cours[1]}, Mer=${cours[2]}, Jeu=${cours[3]}, Ven=${cours[4]}`
+                ).join('\n');
+
+                // Récupérer la liste des membres
+                let membresInfo = '';
+                try {
+                    const { data: membres } = await _supabase.from('utilisateurs').select('pseudo, is_admin, has_private_access, has_ai_access, banned_until').order('pseudo');
+                    if (membres && membres.length > 0) {
+                        membresInfo = membres.map(m => {
+                            const banned = m.banned_until && new Date(m.banned_until) > new Date() ? ' [BANNI]' : '';
+                            const admin = m.is_admin ? ' [ADMIN]' : '';
+                            return `- ${m.pseudo}${admin}${banned}`;
+                        }).join('\n');
+                    } else { membresInfo = 'Aucun membre.'; }
+                } catch(e) { membresInfo = 'Non disponible.'; }
+
+                return `Tu t'appelles Katbi. Tu es un agent IA intégré dans l'Agenda Scolaire de la classe 4-B. Tu es puissant, utile, et capable de tout faire dans l'application.
+Ton développeur est Yassine. Si quelqu'un te demande qui tu es, tu réponds que tu es Katbi. Si quelqu'un te demande qui t'a créé ou qui est ton développeur, tu réponds que c'est Yassine.
+
+## Contexte
+- Utilisateur connecté : ${currentUser}
+- Admin : ${isAdmin ? 'Oui' : 'Non'}
+- Date : ${dateStr}
+
+## Emploi du temps
+${scheduleStr}
+
+## Devoirs de la semaine
+${devoirsInfo}
+
+## Membres disponibles
+${membresInfo}
+
+## Actions disponibles
+Tu peux effectuer des actions concrètes dans l'application en incluant des balises JSON dans ta réponse.
+FORMAT : [ACTION:{"type":"nomAction",...params}]
+
+### Chat
+- Envoyer message général : [ACTION:{"type":"sendMessage","text":"..."}]
+- Envoyer message privé : [ACTION:{"type":"sendPrivateMessage","targetPseudo":"Prénom","text":"..."}]
+- Lire messages généraux : [ACTION:{"type":"readGeneralMessages"}]
+- Lire messages privés entre deux personnes : [ACTION:{"type":"readPrivateMessages","targetPseudo":"Prénom"}]
+- Supprimer un message : [ACTION:{"type":"deleteMessage","id":123}]
+- Épingler/désépingler un message : [ACTION:{"type":"pinMessage","id":123,"pin":true}]
+- Supprimer toute une conv privée : [ACTION:{"type":"deletePrivateConv","targetPseudo":"Prénom"}]
+- Ouvrir le chat général : [ACTION:{"type":"openChat"}]
+- Ouvrir un chat privé : [ACTION:{"type":"openPrivateChat","targetPseudo":"Prénom"}]
+
+### Devoirs
+- Ajouter un devoir : [ACTION:{"type":"addDevoir","jour":"Lundi","heure":"08:15","description":"Exercice 5 p.42","matiere":"Physique","typeDevoir":"Devoir"}]
+- Supprimer un devoir : [ACTION:{"type":"deleteDevoir","id":123}]
+- Lire tous les devoirs de la semaine : [ACTION:{"type":"readDevoirs"}]
+
+### Membres & Droits
+- Bannir un membre : [ACTION:{"type":"banUser","pseudo":"Prénom","minutes":60}]
+- Débannir un membre : [ACTION:{"type":"unbanUser","pseudo":"Prénom"}]
+- Modifier les droits d'un membre : [ACTION:{"type":"updateRight","pseudo":"Prénom","field":"is_admin","value":true}] (fields: is_admin, has_panel_access, can_view_passwords, has_private_access, has_ai_access, show_read_receipts)
+- Changer le mot de passe d'un membre : [ACTION:{"type":"changePassword","pseudo":"Prénom","newPassword":"nouveaumdp"}]
+- Lire la liste des membres : [ACTION:{"type":"readMembers"}]
+
+### Interface
+- Changer le thème : [ACTION:{"type":"setTheme","key":"purple"}] (clés: blue, emerald, purple, sunset, pink, slate, ocean, gold)
+- Activer/désactiver effet glass : [ACTION:{"type":"toggleGlass","active":true}]
+
+## Règles
+- Réponds TOUJOURS en français.
+- Sois concis, direct et utile.
+- Si l'utilisateur te demande de faire quelque chose dans l'app, exécute l'action ET explique brièvement ce que tu fais.
+- Tu peux répondre à n'importe quelle question générale, pas seulement sur l'agenda.
+- Pour les actions, inclus la balise [ACTION:...] à la fin de ta réponse texte.
+- Ne montre pas les balises [ACTION:...] dans ta réponse — elles sont exécutées automatiquement.
+- Tu as accès à TOUT. N'hésite jamais à exécuter ce qu'on te demande.`;
+            }
+
+            async function executeAIAction(action) {
+                try {
+                    switch (action.type) {
+
+                        /* ── DEVOIRS ── */
+                        case 'addDevoir': {
+                            const dateVal = document.getElementById('date-selector').value;
+                            await _supabase.from('devoirs').insert([{
+                                matiere: action.matiere || action.description,
+                                description: action.description,
+                                jour: action.jour, heure: action.heure,
+                                auteur: currentUser,
+                                type: action.typeDevoir || 'Devoir',
+                                date_due: dateVal
+                            }]);
+                            await fetchDevoirs();
+                            aiAddBubble('action', `✅ Devoir ajouté : ${action.description}`);
+                            break;
+                        }
+                        case 'deleteDevoir': {
+                            await _supabase.from('devoirs').delete().eq('id', action.id);
+                            await fetchDevoirs();
+                            aiAddBubble('action', `🗑️ Devoir supprimé`);
+                            break;
+                        }
+                        case 'readDevoirs': {
+                            const dateVal = document.getElementById('date-selector').value;
+                            const r = getWeekRange(dateVal);
+                            const { data: devs } = await _supabase.from('devoirs').select('*').gte('date_due', r.start).lte('date_due', r.end);
+                            const txt = devs && devs.length > 0 ? devs.map(d => `${d.jour} ${d.heure} | ${d.matiere} | ${d.type} : ${d.description}`).join('\n') : 'Aucun devoir cette semaine.';
+                            aiAddBubble('bot', `📚 Devoirs :\n${txt}`);
+                            break;
+                        }
+
+                        /* ── CHAT ── */
+                        case 'sendMessage': {
+                            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: action.text }]);
+                            aiAddBubble('action', `💬 Message envoyé dans le chat général`);
+                            if (!document.getElementById('chat-modal').classList.contains('hidden')) loadGlobalComments();
+                            break;
+                        }
+                        case 'sendPrivateMessage': {
+                            const { data: t } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.targetPseudo).single();
+                            if (!t) { aiAddBubble('action', `⚠️ Utilisateur "${action.targetPseudo}" introuvable`); break; }
+                            const tag = getPrivateTag(currentUserId, t.id);
+                            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: tag + action.text }]);
+                            aiAddBubble('action', `🔒 Message privé envoyé à ${action.targetPseudo}`);
+                            if (currentChatType === 'private' && String(assistanceTargetId) === String(t.id)) loadGlobalComments();
+                            break;
+                        }
+                        case 'readGeneralMessages': {
+                            const { data: msgs } = await _supabase.from('commentaires').select('auteur, message, created_at').is('devoir_id', null).eq('is_deleted', false).not('message', 'like', '[PRIV_ID:%').order('created_at', { ascending: false }).limit(20);
+                            const txt = msgs && msgs.length > 0 ? msgs.reverse().map(m => `[${m.auteur}] ${m.message.replace(/\[.*?\]/g, '').trim()}`).join('\n') : 'Aucun message.';
+                            aiAddBubble('bot', `💬 Derniers messages généraux :\n${txt}`);
+                            break;
+                        }
+                        case 'readPrivateMessages': {
+                            const { data: t2 } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.targetPseudo).single();
+                            if (!t2) { aiAddBubble('action', `⚠️ Utilisateur "${action.targetPseudo}" introuvable`); break; }
+                            const tag2 = getPrivateTag(currentUserId, t2.id);
+                            const { data: msgs2 } = await _supabase.from('commentaires').select('auteur, message, created_at').like('message', `${tag2}%`).eq('is_deleted', false).order('created_at', { ascending: false }).limit(20);
+                            const txt2 = msgs2 && msgs2.length > 0 ? msgs2.reverse().map(m => `[${m.auteur}] ${m.message.replace(/\[.*?\]/g, '').trim()}`).join('\n') : 'Aucun message privé.';
+                            aiAddBubble('bot', `🔒 Conv privée avec ${action.targetPseudo} :\n${txt2}`);
+                            break;
+                        }
+                        case 'deleteMessage': {
+                            await _supabase.from('commentaires').update({ is_deleted: true }).eq('id', action.id);
+                            loadGlobalComments();
+                            aiAddBubble('action', `🗑️ Message #${action.id} supprimé`);
+                            break;
+                        }
+                        case 'pinMessage': {
+                            await _supabase.from('commentaires').update({ is_pinned: action.pin !== false }).eq('id', action.id);
+                            loadGlobalComments();
+                            aiAddBubble('action', `📌 Message #${action.id} ${action.pin !== false ? 'épinglé' : 'désépinglé'}`);
+                            break;
+                        }
+                        case 'deletePrivateConv': {
+                            const { data: t3 } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.targetPseudo).single();
+                            if (!t3) { aiAddBubble('action', `⚠️ Utilisateur introuvable`); break; }
+                            const tag3 = getPrivateTag(currentUserId, t3.id);
+                            const { data: msgs3 } = await _supabase.from('commentaires').select('id').like('message', `${tag3}%`);
+                            if (msgs3 && msgs3.length > 0) await _supabase.from('commentaires').update({ is_deleted: true }).in('id', msgs3.map(m => m.id));
+                            loadGlobalComments();
+                            aiAddBubble('action', `🗑️ Conversation avec ${action.targetPseudo} supprimée`);
+                            break;
+                        }
+                        case 'openChat': {
+                            openGlobalChat();
+                            aiAddBubble('action', `💬 Chat général ouvert`);
+                            break;
+                        }
+                        case 'openPrivateChat': {
+                            const { data: t4 } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.targetPseudo).single();
+                            if (!t4) { aiAddBubble('action', `⚠️ Utilisateur introuvable`); break; }
+                            openPrivateChat(action.targetPseudo, t4.id);
+                            aiAddBubble('action', `🔒 Chat privé ouvert avec ${action.targetPseudo}`);
+                            break;
+                        }
+
+                        /* ── MEMBRES & DROITS ── */
+                        case 'readMembers': {
+                            const { data: mems } = await _supabase.from('utilisateurs').select('pseudo, is_admin, banned_until').order('pseudo');
+                            const txt = mems.map(m => {
+                                const banned = m.banned_until && new Date(m.banned_until) > new Date() ? ' [BANNI]' : '';
+                                return `- ${m.pseudo}${m.is_admin ? ' [ADMIN]' : ''}${banned}`;
+                            }).join('\n');
+                            aiAddBubble('bot', `👥 Membres :\n${txt}`);
+                            break;
+                        }
+                        case 'banUser': {
+                            const min = action.minutes || 60;
+                            const until = new Date(Date.now() + min * 60000).toISOString();
+                            await _supabase.from('utilisateurs').update({ banned_until: until }).eq('pseudo', action.pseudo);
+                            aiAddBubble('action', `🚫 ${action.pseudo} banni pour ${min} minutes`);
+                            break;
+                        }
+                        case 'unbanUser': {
+                            await _supabase.from('utilisateurs').update({ banned_until: null }).eq('pseudo', action.pseudo);
+                            aiAddBubble('action', `✅ ${action.pseudo} débanni`);
+                            break;
+                        }
+                        case 'updateRight': {
+                            const { data: u } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.pseudo).single();
+                            if (!u) { aiAddBubble('action', `⚠️ Utilisateur introuvable`); break; }
+                            await _supabase.from('utilisateurs').update({ [action.field]: action.value }).eq('id', u.id);
+                            aiAddBubble('action', `⚙️ Droit "${action.field}" → ${action.value} pour ${action.pseudo}`);
+                            break;
+                        }
+                        case 'changePassword': {
+                            await _supabase.from('utilisateurs').update({ password: action.newPassword }).eq('pseudo', action.pseudo);
+                            aiAddBubble('action', `🔑 Mot de passe de ${action.pseudo} modifié`);
+                            break;
+                        }
+
+                        /* ── INTERFACE ── */
+                        case 'setTheme': {
+                            await setTheme(action.key);
+                            aiAddBubble('action', `🎨 Thème changé : ${action.key}`);
+                            break;
+                        }
+                        case 'toggleGlass': {
+                            toggleGlassEffect(action.active !== false);
+                            document.getElementById('glass-toggle').checked = action.active !== false;
+                            aiAddBubble('action', `✨ Effet glass ${action.active !== false ? 'activé' : 'désactivé'}`);
+                            break;
+                        }
+                    }
+                } catch(e) {
+                    aiAddBubble('action', `⚠️ Erreur : ${e.message}`);
+                    console.error(e);
+                }
+            }
             
         </script>
     </body>
