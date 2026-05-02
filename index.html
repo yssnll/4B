@@ -1660,6 +1660,8 @@
                 const isFirst = cont.innerHTML === "";
                 const { data: vuesServ } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
                 const vuesIds = [...(vuesServ?.map(v => v.message_id) || []), ...localVuesIds];
+                // Identifier le premier message non lu (pas de moi) avant de construire le HTML
+                let firstUnreadId = null;
                 
                 // Récupérer les infos des utilisateurs pour filtrer les vues
                 const { data: allUsers } = await _supabase.from('utilisateurs').select('pseudo, show_read_receipts');
@@ -1677,6 +1679,18 @@
                 if (!msgs) return;
                 allMessagesCache = msgs;
 
+                // Trouver le premier message non lu (pas de moi, pas système)
+                if (isFirst) {
+                    for (const m of msgs) {
+                        const isMe = String(m.auteur_id) === String(currentUserId);
+                        const isSys = m.message?.includes('[SYSTEM_TAG]');
+                        if (!isMe && !isSys && !vuesIds.includes(m.id)) {
+                            firstUnreadId = m.id;
+                            break;
+                        }
+                    }
+                }
+
                 let html = ""; let lastAid = "";
                 msgs.forEach(c => {
                     if (c.message) {
@@ -1692,6 +1706,25 @@
                             lastAid = "system";
                             return;
                         }
+                    }
+
+                    // Insérer le séparateur "non lus" avant le premier message non lu
+                    if (firstUnreadId && c.id === firstUnreadId) {
+                        html += `<div id="unread-separator" style="
+                            display:flex; align-items:center; gap:10px;
+                            margin:16px 0 8px; padding:0 4px;
+                            position:relative;
+                        ">
+                            <div style="flex:1; height:1px; background:linear-gradient(to right,transparent,rgba(239,68,68,0.4))"></div>
+                            <span style="
+                                font-size:10px; font-weight:800; color:#ef4444;
+                                text-transform:uppercase; letter-spacing:0.08em;
+                                background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2);
+                                padding:3px 12px; border-radius:20px; white-space:nowrap;
+                                backdrop-filter:blur(8px);
+                            ">Non lus</span>
+                            <div style="flex:1; height:1px; background:linear-gradient(to left,transparent,rgba(239,68,68,0.4))"></div>
+                        </div>`;
                     }
 
                     const isMe = String(c.auteur_id) === String(currentUserId);
@@ -1799,7 +1832,20 @@
                     html += `<div class="system-msg-box">${escapeHTML(t.message.replace('[SYSTEM_TAG] ', ''))}</div>`;
                 });
 
-                cont.innerHTML = html; if (isFirst || isBottom) cont.scrollTop = cont.scrollHeight;
+                cont.innerHTML = html;
+                if (isFirst) {
+                    const sep = document.getElementById('unread-separator');
+                    if (sep) {
+                        // Petit délai pour que le DOM soit rendu avant de scroller
+                        requestAnimationFrame(() => {
+                            sep.scrollIntoView({ block: 'center' });
+                        });
+                    } else {
+                        cont.scrollTop = cont.scrollHeight;
+                    }
+                } else if (isBottom) {
+                    cont.scrollTop = cont.scrollHeight;
+                }
             }
 
             async function markAsSeen(id) { 
