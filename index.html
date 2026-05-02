@@ -1350,12 +1350,11 @@
             }
 
             async function handleYassineAwayAutoReply(tag, senderName, userMessage) {
-                if (!yassineAwayStatus?.active) return;
                 const alreadyGreeted = katbiGreetedTags.has(tag);
                 if (!alreadyGreeted) {
                     await sendKatbiPrivateMessage(tag, `Salam ${senderName}, c'est Katbi. Yassine va revenir plus tard.`);
                     katbiGreetedTags.add(tag);
-                } else if (yassineAwayStatus.details) {
+                } else if (yassineAwayStatus?.active && yassineAwayStatus.details) {
                     const msgLower = userMessage.toLowerCase();
                     const isAskingForInfo = msgLower.includes('quand') || msgLower.includes('heure') ||
                         msgLower.includes('retour') || msgLower.includes('revient') ||
