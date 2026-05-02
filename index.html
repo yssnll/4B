@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -715,6 +716,7 @@
             let selectedFile = null;
             let isAdmin = false;
             let canViewPasswordsGlobal = false;
+            let globalApiKey = '';
             let currentChatType = "general"; 
             let assistanceTargetUser = ""; 
             let assistanceTargetId = ""; 
@@ -880,6 +882,7 @@
                     // ----------------------------------------------------
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
+                    loadGlobalApiKey();
                     if (data.has_ai_access === true || currentUser === "Yassine El") {
                         document.getElementById('ai-fab').classList.add('visible');
                     }
@@ -1722,9 +1725,19 @@
                 }
             }
 
+            async function loadGlobalApiKey() {
+                try {
+                    const { data } = await _supabase.from('config').select('value').eq('key', 'openrouter_api_key').single();
+                    if (data && data.value) globalApiKey = data.value;
+                } catch(e) { console.error('Erreur chargement clé API', e); }
+            }
+
             function openAIKeyModal() {
-                const existing = localStorage.getItem('ai_api_key') || '';
-                document.getElementById('ai-key-input').value = existing;
+                if (!isAdmin && currentUser !== "Yassine El") {
+                    showToast('Seul un administrateur peut modifier la clé API.');
+                    return;
+                }
+                document.getElementById('ai-key-input').value = globalApiKey;
                 document.getElementById('ai-key-modal').classList.remove('hidden');
             }
 
@@ -1733,13 +1746,19 @@
                 return raw.replace(/[^\x20-\x7E]/g, '').trim();
             }
 
-            function saveAIKey() {
+            async function saveAIKey() {
                 const key = sanitizeApiKey(document.getElementById('ai-key-input').value);
                 if (!key) return;
-                localStorage.setItem('ai_api_key', key);
-                document.getElementById('ai-key-modal').classList.add('hidden');
-                showToast('Clé API enregistrée ✓');
-                if (aiConversation.length === 0) aiShowWelcome();
+                try {
+                    await _supabase.from('config').upsert({ key: 'openrouter_api_key', value: key });
+                    globalApiKey = key;
+                    document.getElementById('ai-key-modal').classList.add('hidden');
+                    showToast('Clé API enregistrée pour tous ✓');
+                    if (aiConversation.length === 0) aiShowWelcome();
+                } catch(e) {
+                    showToast('Erreur lors de la sauvegarde de la clé.');
+                    console.error(e);
+                }
             }
 
             function aiShowWelcome() {
@@ -1771,7 +1790,7 @@
                 const text = input.value.trim();
                 if (!text) return;
 
-                const apiKey = sanitizeApiKey(localStorage.getItem('ai_api_key') || '');
+                const apiKey = sanitizeApiKey(globalApiKey);
                 if (!apiKey) {
                     openAIKeyModal();
                     return;
