@@ -1,6 +1,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1006,6 +1008,8 @@
             let reactionTargetId = null;
             let tempSystemMessages = [];
             let userHasPrivateAccess = false;
+            let yassineAwayStatus = null;
+            let katbiGreetedTags = new Set();
 
             const extraEmojisList = ['💯','✨','🚀','💡','💣','🔒','💩','👻','💀','👽','🤖','🎃','🫶','🤌','👀','🧠','💥','🎉','🏆','🤔','😎','🥳','😡','🤯','🤮'];
 
@@ -1153,6 +1157,7 @@
                             document.getElementById('notif-bell').style.display = 'flex';
                         }
                     }
+
                     // ----------------------------------------------------
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
@@ -1320,7 +1325,49 @@
                 }
             }
 
-            function initApp() { generateGrid(); fetchDevoirs(); checkNewMessages(); }
+            function initApp() { generateGrid(); fetchDevoirs(); checkNewMessages(); loadYassineAwayStatus(); }
+
+            async function loadYassineAwayStatus() {
+                try {
+                    const { data } = await _supabase.from('config').select('value').eq('key', 'yassine_away').single();
+                    if (data && data.value) {
+                        yassineAwayStatus = JSON.parse(data.value);
+                    } else {
+                        yassineAwayStatus = { active: false };
+                    }
+                } catch(e) { yassineAwayStatus = { active: false }; }
+            }
+
+            async function sendKatbiPrivateMessage(tag, text) {
+                await _supabase.from('commentaires').insert([{
+                    auteur: "Katbi 🤖",
+                    auteur_id: "katbi-auto-000",
+                    message: tag + text
+                }]);
+                if (!document.getElementById('chat-modal').classList.contains('hidden')) {
+                    loadGlobalComments();
+                }
+            }
+
+            async function handleYassineAwayAutoReply(tag, senderName, userMessage) {
+                if (!yassineAwayStatus?.active) return;
+                const alreadyGreeted = katbiGreetedTags.has(tag);
+                if (!alreadyGreeted) {
+                    await sendKatbiPrivateMessage(tag, `Salam ${senderName}, c'est Katbi. Yassine va revenir plus tard.`);
+                    katbiGreetedTags.add(tag);
+                } else if (yassineAwayStatus.details) {
+                    const msgLower = userMessage.toLowerCase();
+                    const isAskingForInfo = msgLower.includes('quand') || msgLower.includes('heure') ||
+                        msgLower.includes('retour') || msgLower.includes('revient') ||
+                        msgLower.includes('combien') || msgLower.includes('bientôt') ||
+                        msgLower.includes('bientot') || msgLower.includes('info') ||
+                        msgLower.includes('quoi') || msgLower.includes('pourquoi') ||
+                        msgLower.includes('longtemps') || msgLower.includes('dit');
+                    if (isAskingForInfo) {
+                        await sendKatbiPrivateMessage(tag, yassineAwayStatus.details);
+                    }
+                }
+            }
 
             function generateGrid() {
                 const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
@@ -1942,6 +1989,10 @@
                     if (data) url = _supabase.storage.from('chat-attachments').getPublicUrl(name).data.publicUrl;
                 }
                 await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: finalMsg, file_url: url }]);
+                if (currentChatType === "private" && assistanceTargetUser === "Yassine El" && currentUser !== "Yassine El") {
+                    await loadYassineAwayStatus();
+                    await handleYassineAwayAutoReply(getPrivateTag(currentUserId, assistanceTargetId), currentUser, m);
+                }
                 input.value = ""; clearFile(); cancelReply(); loadGlobalComments();
             }
 
@@ -2272,6 +2323,12 @@ FORMAT : [ACTION:{"type":"nomAction",...params}]
 - Changer le thème : [ACTION:{"type":"setTheme","key":"purple"}] (clés: blue, emerald, purple, sunset, pink, slate, ocean, gold)
 - Activer/désactiver effet glass : [ACTION:{"type":"toggleGlass","active":true}]
 
+${currentUser === "Yassine El" ? `### Mode Absent (toi uniquement)
+Tu peux activer le mode absent : quand quelqu'un t'enverra un message privé, Katbi leur répondra automatiquement "Salam [prénom], c'est Katbi. Yassine va revenir plus tard." Et si la personne demande des infos supplémentaires (heure de retour, etc.), Katbi donnera le message que tu as précisé dans "details".
+- Activer : [ACTION:{"type":"setAwayStatus","active":true,"details":"...message à donner si on demande des infos, ex: il revient vers 18h"}]
+- Désactiver : [ACTION:{"type":"setAwayStatus","active":false}]
+Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT — details: ' + (yassineAwayStatus.details || 'aucun') : '🟢 PRÉSENT'}` : ''}
+
 ## Règles
 - Réponds TOUJOURS en français.
 - Sois concis, direct et utile.
@@ -2427,6 +2484,23 @@ FORMAT : [ACTION:{"type":"nomAction",...params}]
                             toggleGlassEffect(action.active !== false);
                             document.getElementById('glass-toggle').checked = action.active !== false;
                             aiAddBubble('action', `✨ Effet glass ${action.active !== false ? 'activé' : 'désactivé'}`);
+                            break;
+                        }
+
+                        case 'setAwayStatus': {
+                            if (currentUser !== "Yassine El") {
+                                aiAddBubble('action', `⚠️ Seul Yassine El peut gérer le mode absent.`);
+                                break;
+                            }
+                            const awayData = { active: action.active !== false, details: action.details || '' };
+                            await _supabase.from('config').upsert({ key: 'yassine_away', value: JSON.stringify(awayData) });
+                            yassineAwayStatus = awayData;
+                            if (awayData.active) {
+                                katbiGreetedTags.clear();
+                                aiAddBubble('action', `🔴 Mode absent activé. Katbi répondra automatiquement à tes messages privés.${awayData.details ? '\nInfos partagées si demandé : ' + awayData.details : ''}`);
+                            } else {
+                                aiAddBubble('action', `🟢 Mode absent désactivé. Tu es de retour !`);
+                            }
                             break;
                         }
                     }
