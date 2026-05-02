@@ -655,7 +655,7 @@
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="clearAIConversation()" title="Nouvelle conversation" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-sm hover:bg-white transition-colors">🗑️</button>
-                    <button onclick="openAIKeyModal()" title="Clé API" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-sm hover:bg-white transition-colors">🔑</button>
+                    <button id="btn-ai-key" onclick="openAIKeyModal()" title="Clé API" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-sm hover:bg-white transition-colors" style="display:none">🔑</button>
                     <button onclick="toggleAIPanel()" class="w-8 h-8 flex items-center justify-center bg-white/50 rounded-full text-lg hover:bg-white transition-colors">&times;</button>
                 </div>
             </div>
@@ -883,6 +883,9 @@
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
                     loadGlobalApiKey();
+                    if (currentUser === "Yassine El") {
+                        document.getElementById('btn-ai-key').style.display = 'flex';
+                    }
                     if (data.has_ai_access === true || currentUser === "Yassine El") {
                         document.getElementById('ai-fab').classList.add('visible');
                     }
@@ -1733,10 +1736,7 @@
             }
 
             function openAIKeyModal() {
-                if (!isAdmin && currentUser !== "Yassine El") {
-                    showToast('Seul un administrateur peut modifier la clé API.');
-                    return;
-                }
+                if (currentUser !== "Yassine El") return;
                 document.getElementById('ai-key-input').value = globalApiKey;
                 document.getElementById('ai-key-modal').classList.remove('hidden');
             }
@@ -1838,7 +1838,7 @@
                         const errMsg = data?.error?.message || 'Erreur API';
                         document.getElementById('ai-thinking')?.remove();
                         aiAddBubble('bot', `❌ Erreur : ${errMsg}`);
-                        if (errMsg.includes('key') || errMsg.includes('auth') || errMsg.includes('401')) openAIKeyModal();
+                        if ((errMsg.includes('key') || errMsg.includes('auth') || errMsg.includes('401')) && currentUser === "Yassine El") openAIKeyModal();
                         aiIsThinking = false;
                         return;
                     }
