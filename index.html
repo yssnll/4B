@@ -413,15 +413,17 @@
                 width: 60px;
                 height: 60px;
                 border-radius: 50%;
-                background: linear-gradient(145deg, #8b5cf6, #6d28d9, #4c1d95);
+                background: linear-gradient(145deg, rgba(139,92,246,0.65), rgba(109,40,217,0.65), rgba(76,29,149,0.65));
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
                 color: white;
                 font-size: 26px;
-                border: none;
+                border: 1px solid rgba(255,255,255,0.2);
                 cursor: pointer;
                 box-shadow:
-                    0 8px 32px rgba(109, 40, 217, 0.55),
-                    0 2px 8px rgba(0,0,0,0.2),
-                    inset 0 1px 0 rgba(255,255,255,0.3);
+                    0 8px 32px rgba(109, 40, 217, 0.35),
+                    0 2px 8px rgba(0,0,0,0.12),
+                    inset 0 1px 0 rgba(255,255,255,0.25);
                 transition: all 0.35s var(--spring);
                 display: none;
                 align-items: center;
@@ -429,12 +431,12 @@
                 animation: fabPulse 3s ease-in-out infinite;
             }
             @keyframes fabPulse {
-                0%,100% { box-shadow: 0 8px 32px rgba(109,40,217,0.55), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3); }
-                50% { box-shadow: 0 12px 48px rgba(109,40,217,0.7), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3), 0 0 0 10px rgba(109,40,217,0.08); }
+                0%,100% { box-shadow: 0 8px 32px rgba(109,40,217,0.35), 0 2px 8px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.25); }
+                50% { box-shadow: 0 12px 48px rgba(109,40,217,0.45), 0 2px 8px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.25), 0 0 0 10px rgba(109,40,217,0.06); }
             }
             #ai-fab:hover {
                 transform: scale(1.12) translateY(-2px);
-                box-shadow: 0 16px 48px rgba(109,40,217,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+                box-shadow: 0 16px 48px rgba(109,40,217,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
                 animation: none;
             }
             #ai-fab:active { transform: scale(0.95); }
@@ -926,7 +928,7 @@
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-purple-300 flex items-center justify-center text-lg">🤖</div>
                     <div>
-                        <p class="font-black text-purple-900 text-sm">Katbi</p>
+                        <p class="font-black text-purple-900 text-sm">Quorby</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -1157,7 +1159,6 @@
                             document.getElementById('notif-bell').style.display = 'flex';
                         }
                     }
-
                     // ----------------------------------------------------
                     updateWelcomeUI(); initApp();
                     setupTypingListener();
@@ -1338,9 +1339,9 @@
                 } catch(e) { yassineAwayStatus = { active: false }; }
             }
 
-            async function sendKatbiPrivateMessage(tag, text) {
+            async function sendQuorbyPrivateMessage(tag, text) {
                 await _supabase.from('commentaires').insert([{
-                    auteur: "Katbi 🤖",
+                    auteur: "Quorby 🤖",
                     auteur_id: "katbi-auto-000",
                     message: tag + text
                 }]);
@@ -1350,11 +1351,12 @@
             }
 
             async function handleYassineAwayAutoReply(tag, senderName, userMessage) {
+                if (!yassineAwayStatus?.active) return;
                 const alreadyGreeted = katbiGreetedTags.has(tag);
                 if (!alreadyGreeted) {
-                    await sendKatbiPrivateMessage(tag, `Salam ${senderName}, c'est Katbi. Yassine va revenir plus tard.`);
+                    await sendQuorbyPrivateMessage(tag, `Salam ${senderName}, Yassine est parti il va revenir plus tard.`);
                     katbiGreetedTags.add(tag);
-                } else if (yassineAwayStatus?.active && yassineAwayStatus.details) {
+                } else if (yassineAwayStatus.details) {
                     const msgLower = userMessage.toLowerCase();
                     const isAskingForInfo = msgLower.includes('quand') || msgLower.includes('heure') ||
                         msgLower.includes('retour') || msgLower.includes('revient') ||
@@ -1363,7 +1365,7 @@
                         msgLower.includes('quoi') || msgLower.includes('pourquoi') ||
                         msgLower.includes('longtemps') || msgLower.includes('dit');
                     if (isAskingForInfo) {
-                        await sendKatbiPrivateMessage(tag, yassineAwayStatus.details);
+                        await sendQuorbyPrivateMessage(tag, yassineAwayStatus.details);
                     }
                 }
             }
@@ -2274,8 +2276,8 @@
                     } else { membresInfo = 'Aucun membre.'; }
                 } catch(e) { membresInfo = 'Non disponible.'; }
 
-                return `Tu t'appelles Katbi. Tu es un agent IA intégré dans l'Agenda Scolaire de la classe 4-B. Tu es puissant, utile, et capable de tout faire dans l'application.
-Ton développeur est Yassine. Si quelqu'un te demande qui tu es, tu réponds que tu es Katbi. Si quelqu'un te demande qui t'a créé ou qui est ton développeur, tu réponds que c'est Yassine.
+                return `Tu t'appelles Quorby. Tu es un agent IA intégré dans l'Agenda Scolaire de la classe 4-B. Tu es puissant, utile, et capable de tout faire dans l'application.
+Ton développeur est Yassine. Si quelqu'un te demande qui tu es, tu réponds que tu es Quorby. Si quelqu'un te demande qui t'a créé ou qui est ton développeur, tu réponds que c'est Yassine.
 
 ## Contexte
 - Utilisateur connecté : ${currentUser}
@@ -2323,7 +2325,7 @@ FORMAT : [ACTION:{"type":"nomAction",...params}]
 - Activer/désactiver effet glass : [ACTION:{"type":"toggleGlass","active":true}]
 
 ${currentUser === "Yassine El" ? `### Mode Absent (toi uniquement)
-Tu peux activer le mode absent : quand quelqu'un t'enverra un message privé, Katbi leur répondra automatiquement "Salam [prénom], c'est Katbi. Yassine va revenir plus tard." Et si la personne demande des infos supplémentaires (heure de retour, etc.), Katbi donnera le message que tu as précisé dans "details".
+Tu peux activer le mode absent : quand quelqu'un t'enverra un message privé, Quorby leur répondra automatiquement "Salam [prénom], Yassine est parti il va revenir plus tard." Et si la personne demande des infos supplémentaires (heure de retour, etc.), Quorby donnera le message que tu as précisé dans "details".
 - Activer : [ACTION:{"type":"setAwayStatus","active":true,"details":"...message à donner si on demande des infos, ex: il revient vers 18h"}]
 - Désactiver : [ACTION:{"type":"setAwayStatus","active":false}]
 Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT — details: ' + (yassineAwayStatus.details || 'aucun') : '🟢 PRÉSENT'}` : ''}
@@ -2496,7 +2498,7 @@ Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT — details: ' + (yas
                             yassineAwayStatus = awayData;
                             if (awayData.active) {
                                 katbiGreetedTags.clear();
-                                aiAddBubble('action', `🔴 Mode absent activé. Katbi répondra automatiquement à tes messages privés.${awayData.details ? '\nInfos partagées si demandé : ' + awayData.details : ''}`);
+                                aiAddBubble('action', `🔴 Mode absent activé. Quorby répondra automatiquement à tes messages privés.${awayData.details ? '\nInfos partagées si demandé : ' + awayData.details : ''}`);
                             } else {
                                 aiAddBubble('action', `🟢 Mode absent désactivé. Tu es de retour !`);
                             }
