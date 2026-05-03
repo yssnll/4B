@@ -1330,21 +1330,34 @@
 
             async function loadYassineAwayStatus() {
                 try {
-                    const { data } = await _supabase.from('config').select('value').eq('key', 'yassine_away').single();
+                    const { data, error } = await _supabase.from('config').select('value').eq('key', 'yassine_away').single();
+                    if (error) {
+                        console.error('[Quorby] Erreur lecture config yassine_away:', error.message, error.code);
+                        yassineAwayStatus = { active: false };
+                        return;
+                    }
                     if (data && data.value) {
                         yassineAwayStatus = JSON.parse(data.value);
+                        console.log('[Quorby] Statut absent chargé:', yassineAwayStatus);
                     } else {
+                        console.warn('[Quorby] Clé yassine_away introuvable dans config');
                         yassineAwayStatus = { active: false };
                     }
-                } catch(e) { yassineAwayStatus = { active: false }; }
+                } catch(e) {
+                    console.error('[Quorby] Exception loadYassineAwayStatus:', e);
+                    yassineAwayStatus = { active: false };
+                }
             }
 
             async function sendQuorbyPrivateMessage(tag, text) {
-                await _supabase.from('commentaires').insert([{
+                const { error } = await _supabase.from('commentaires').insert([{
                     auteur: "Quorby 🤖",
                     auteur_id: "katbi-auto-000",
                     message: tag + text
                 }]);
+                if (error) {
+                    console.error('[Quorby] Erreur insert message Quorby:', error.message, error.code);
+                }
                 if (!document.getElementById('chat-modal').classList.contains('hidden')) {
                     loadGlobalComments();
                 }
@@ -1354,19 +1367,13 @@
                 if (!yassineAwayStatus?.active) return;
                 const alreadyGreeted = katbiGreetedTags.has(tag);
                 if (!alreadyGreeted) {
-                    await sendQuorbyPrivateMessage(tag, `Salam ${senderName}, Yassine est parti il va revenir plus tard.`);
+                    const intro = `Salam ${senderName}, Yassine est absent il va revenir plus tard.`;
+                    const details = yassineAwayStatus.details ? `\n${yassineAwayStatus.details}` : '';
+                    await sendQuorbyPrivateMessage(tag, intro + details);
                     katbiGreetedTags.add(tag);
-                } else if (yassineAwayStatus.details) {
-                    const msgLower = userMessage.toLowerCase();
-                    const isAskingForInfo = msgLower.includes('quand') || msgLower.includes('heure') ||
-                        msgLower.includes('retour') || msgLower.includes('revient') ||
-                        msgLower.includes('combien') || msgLower.includes('bientôt') ||
-                        msgLower.includes('bientot') || msgLower.includes('info') ||
-                        msgLower.includes('quoi') || msgLower.includes('pourquoi') ||
-                        msgLower.includes('longtemps') || msgLower.includes('dit');
-                    if (isAskingForInfo) {
-                        await sendQuorbyPrivateMessage(tag, yassineAwayStatus.details);
-                    }
+                } else {
+                    const reply = yassineAwayStatus.details || "Je ne sais pas.";
+                    await sendQuorbyPrivateMessage(tag, reply);
                 }
             }
 
