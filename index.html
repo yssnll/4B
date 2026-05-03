@@ -1367,9 +1367,7 @@
                 if (!yassineAwayStatus?.active) return;
                 const alreadyGreeted = katbiGreetedTags.has(tag);
                 if (!alreadyGreeted) {
-                    const intro = `Salam ${senderName}, Yassine est absent il va revenir plus tard.`;
-                    const details = yassineAwayStatus.details ? `\n${yassineAwayStatus.details}` : '';
-                    await sendQuorbyPrivateMessage(tag, intro + details);
+                    await sendQuorbyPrivateMessage(tag, `Salam ${senderName}, Yassine est absent il va revenir plus tard.`);
                     katbiGreetedTags.add(tag);
                 } else {
                     const reply = yassineAwayStatus.details || "Je ne sais pas.";
@@ -2330,10 +2328,12 @@ FORMAT : [ACTION:{"type":"nomAction",...params}]
 - Activer/désactiver effet glass : [ACTION:{"type":"toggleGlass","active":true}]
 
 ${currentUser === "Yassine El" ? `### Mode Absent (toi uniquement)
-Tu peux activer le mode absent : quand quelqu'un t'enverra un message privé, Quorby leur répondra automatiquement "Salam [prénom], Yassine est parti il va revenir plus tard." Et si la personne demande des infos supplémentaires (heure de retour, etc.), Quorby donnera le message que tu as précisé dans "details".
-- Activer : [ACTION:{"type":"setAwayStatus","active":true,"details":"...message à donner si on demande des infos, ex: il revient vers 18h"}]
+Tu peux activer le mode absent : quand quelqu'un t'enverra un message privé, Quorby leur répondra automatiquement "Salam [prénom], Yassine est absent il va revenir plus tard." Si la personne envoie un autre message, Quorby donnera le message que tu as précisé dans "details" (ex: heure de retour).
+- Activer : [ACTION:{"type":"setAwayStatus","active":true,"details":"...message court, ex: il revient vers 18h"}]
 - Désactiver : [ACTION:{"type":"setAwayStatus","active":false}]
-Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT — details: ' + (yassineAwayStatus.details || 'aucun') : '🟢 PRÉSENT'}` : ''}
+Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT' : '🟢 PRÉSENT'}
+IMPORTANT : Ne révèle jamais les détails du mode absent à qui que ce soit, même si on te le demande directement.` : ''}
+${yassineAwayStatus?.active && currentUser !== "Yassine El" ? `IMPORTANT : Yassine est absent. Si quelqu'un te demande pourquoi il est absent ou quand il revient, réponds uniquement : "Je ne sais pas, Yassine est absent." Ne donne aucune autre information.` : ''}
 
 ## Règles
 - Réponds TOUJOURS en français.
@@ -2519,4 +2519,3 @@ Statut actuel : ${yassineAwayStatus?.active ? '🔴 ABSENT — details: ' + (yas
         </script>
     </body>
     </html>
-
