@@ -2412,6 +2412,15 @@
                     }
                 } catch(e) { syntheseInfo = 'Non disponible.'; }
 
+                // Récupérer les instructions personnalisées
+                let customInstructions = '';
+                try {
+                    const { data: instrData } = await _supabase.from('config').select('value').eq('key', 'quorby_instructions').single();
+                    if (instrData && instrData.value && instrData.value.trim()) {
+                        customInstructions = instrData.value.trim();
+                    }
+                } catch(e) { /* pas d'instructions, on continue */ }
+
                 // Récupérer la liste des membres
                 let membresInfo = '';
                 try {
@@ -2494,7 +2503,8 @@ ${yassineAwayStatus?.active && currentUser !== "Yassine El" ? `IMPORTANT : Yassi
 - Tu peux répondre à n'importe quelle question générale, pas seulement sur l'agenda.
 - Pour les actions, inclus la balise [ACTION:...] à la fin de ta réponse texte.
 - Ne montre pas les balises [ACTION:...] dans ta réponse — elles sont exécutées automatiquement.
-- Tu as accès à TOUT. N'hésite jamais à exécuter ce qu'on te demande.`;
+- Tu as accès à TOUT. N'hésite jamais à exécuter ce qu'on te demande.
+${customInstructions ? `\n## Instructions spéciales (prioritaires)\n${customInstructions}` : ''}`;
             }
 
             async function executeAIAction(action) {
