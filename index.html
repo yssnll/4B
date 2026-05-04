@@ -4,6 +4,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1436,7 +1438,6 @@
             async function sendQuorbyPrivateMessage(tag, text) {
                 const { error } = await _supabase.from('commentaires').insert([{
                     auteur: "Quorby 🤖",
-                    auteur_id: "katbi-auto-000",
                     message: tag + text
                 }]);
                 if (error) {
@@ -1519,16 +1520,21 @@
                 document.getElementById('chat-list-modal').classList.remove('hidden');
                 const { data: users } = await _supabase.from('utilisateurs').select('id, pseudo, has_private_access').neq('id', currentUserId).eq('has_private_access', true).order('pseudo');
                 const { data: userVues } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
-                const userVuesIds = [...(userVues?.map(v => v.message_id) || []), ...localVuesIds];
-                
+                const lsSeenList = _lsSeenLoad();
+                const userVuesIds = new Set([
+                    ...(userVues?.map(v => String(v.message_id)) || []),
+                    ...localVuesIds.map(String),
+                    ...lsSeenList
+                ]);
+
                 const { data: privateMsgs } = await _supabase.from('commentaires').select('id, message').is('devoir_id', null).like('message', `%${currentUserId}%`);
-                
+
                 const list = document.getElementById('private-users-list');
                 list.innerHTML = users.map(u => {
                     const tag = getPrivateTag(currentUserId, u.id);
                     const hasUnread = privateMsgs?.some(m => {
                         const regex = new RegExp(`\\[PRIV_ID:(.*?:)?${currentUserId}(:.*?)?\\]`);
-                        return m.message.includes(tag) && regex.test(m.message) && !userVuesIds.includes(m.id);
+                        return m.message.includes(tag) && regex.test(m.message) && !userVuesIds.has(String(m.id));
                     });
                     return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)} ${hasUnread ? '<span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>' : ''}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
                 }).join('');
@@ -1572,35 +1578,37 @@
                 if (activeNotifs.length === 0) { list.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm italic">Aucune notification</div>`; return; }
                 list.innerHTML = activeNotifs.map(n => {
                     const cleanMsg = n.message.replace(/\[PRIV_ID:.*?\]/, "").substring(0, 30) + "...";
-                    return `<div class="p-4 bg-white/60 rounded-2xl border border-white/40 flex justify-between items-start gap-2 modal-animate"><div class="flex-1 cursor-pointer" onclick="openPrivateChat('${escapeHTML(n.auteur)}', '${n.auteur_id}')"><p class="text-[10px] font-black text-blue-600 uppercase mb-1">${escapeHTML(n.auteur)}</p><p class="text-xs text-gray-700 font-medium">${escapeHTML(cleanMsg)}</p></div><button onclick="dismissBellNotif(${n.id})" class="p-1 text-gray-300 hover:text-red-500 transition-colors">✕</button></div>`;
+                    return `<div class="p-4 bg-white/60 rounded-2xl border border-white/40 flex justify-between items-start gap-2 modal-animate"><div class="flex-1 cursor-pointer" onclick="document.getElementById('bell-modal').classList.add('hidden'); openPrivateChat('${escapeHTML(n.auteur)}', '${n.auteur_id}')"><p class="text-[10px] font-black text-blue-600 uppercase mb-1">${escapeHTML(n.auteur)}</p><p class="text-xs text-gray-700 font-medium">${escapeHTML(cleanMsg)}</p></div><button onclick="dismissBellNotif(${n.id})" class="p-1 text-gray-300 hover:text-red-500 transition-colors">✕</button></div>`;
                 }).join('');
             }
 
-            function dismissBellNotif(id) { 
+            function dismissBellNotif(id) {
                 // ✅ Marquer comme vu + supprimer de la base
                 (async () => {
                     await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
                     await _supabase.from('commentaires').delete().eq('id', id);
-                    
-                    locallyDismissedIds.push(id); 
+
+                    locallyDismissedIds.push(id);
                     localVuesIds.push(id);
+                    _lsSeenSave(id);
                     
                     // ✅ Attendre un peu pour que la sync soit complète
                     await new Promise(r => setTimeout(r, 200));
                     await checkNewMessages();
                 })();
             }
-            function dismissAllBellNotifs() { 
+            function dismissAllBellNotifs() {
                 // ✅ Marquer tous comme vus + supprimer
                 (async () => {
                     for (const n of privateUnreadList) {
                         await _supabase.from('vues_messages').upsert([{ message_id: n.id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
                         localVuesIds.push(n.id);
-                        
+                        _lsSeenSave(n.id);
+
                         if (n.message && n.message.includes('[SYSTEM_TAG]')) {
                             await _supabase.from('commentaires').delete().eq('id', n.id);
                         }
-                        if(!locallyDismissedIds.includes(n.id)) locallyDismissedIds.push(n.id); 
+                        if(!locallyDismissedIds.includes(n.id)) locallyDismissedIds.push(n.id);
                     }
                     
                     // ✅ Attendre un peu pour que la sync soit complète
@@ -1620,10 +1628,16 @@
             async function checkNewMessages() {
                 if (!currentUser) return;
                 const { data: vues } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
-                const vuesIds = [...(vues?.map(v => v.message_id) || []), ...localVuesIds];
+                // Normaliser tout en strings pour éviter les mismatch de types int/string
+                const lsSeen = _lsSeenLoad();
+                const vuesIds = new Set([
+                    ...(vues?.map(v => String(v.message_id)) || []),
+                    ...localVuesIds.map(String),
+                    ...lsSeen
+                ]);
                 
-                const { data: genMsgs } = await _supabase.from('commentaires').select('id').is('devoir_id', null).eq('is_deleted', false).not('message', 'like', '[PRIV_ID:%').neq('auteur_id', currentUserId);
-                const hasUnreadGen = genMsgs?.some(m => !vuesIds.includes(m.id));
+                const { data: genMsgs } = await _supabase.from('commentaires').select('id').is('devoir_id', null).eq('is_deleted', false).not('message', 'like', '[PRIV_ID:%').not('message', 'like', '[QUORBY_AI:%').neq('auteur_id', currentUserId);
+                const hasUnreadGen = genMsgs?.some(m => !vuesIds.has(String(m.id)));
                 document.getElementById('chat-notif').style.display = hasUnreadGen ? 'block' : 'none';
 
                 const { data: privMsgs } = await _supabase.from('commentaires')
@@ -1639,10 +1653,11 @@
                     return tagMatch[1] === String(currentUserId) || tagMatch[2] === String(currentUserId);
                 }) || [];
 
-                privateUnreadList = filteredPriv.filter(m => !vuesIds.includes(m.id));
+                privateUnreadList = filteredPriv.filter(m => !vuesIds.has(String(m.id)));
 
-                // Marquer les notifications de réaction comme lues (dismissed) quand on ouvre le chat privé
-                if (currentChatType === "private") {
+                // Marquer les notifications de réaction comme lues (dismissed) UNIQUEMENT si le chat privé est ouvert
+                const isChatModalOpen = !document.getElementById('chat-modal').classList.contains('hidden');
+                if (currentChatType === "private" && isChatModalOpen) {
                     privateUnreadList.forEach(m => {
                         if (m.message && m.message.includes('[SYSTEM_TAG]')) {
                             // ✅ Supprimer les messages système de réaction automatiquement
@@ -1828,7 +1843,12 @@
                 const isBottom = cont.scrollHeight - cont.clientHeight <= cont.scrollTop + 50;
                 const isFirst = cont.innerHTML === "";
                 const { data: vuesServ } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
-                const vuesIds = [...(vuesServ?.map(v => v.message_id) || []), ...localVuesIds];
+                const lsSeenChat = _lsSeenLoad();
+                const vuesIds = new Set([
+                    ...(vuesServ?.map(v => String(v.message_id)) || []),
+                    ...localVuesIds.map(String),
+                    ...lsSeenChat
+                ]);
                 // Identifier le premier message non lu (pas de moi) avant de construire le HTML
                 let firstUnreadId = null;
                 
@@ -1839,9 +1859,9 @@
                 
                 let query = _supabase.from('commentaires').select('*, vues_messages(user_pseudo), utilisateurs!auteur_id(show_read_receipts)').is('devoir_id', null);
                 if (!isHistoryMode) { query = query.eq('is_deleted', false); }
-                if (forcedTag) { query = query.like('message', `${forcedTag}%`); } 
-                else if (currentChatType === "private") { const tag = getPrivateTag(currentUserId, assistanceTargetId); query = query.like('message', `${tag}%`); } 
-                else { query = query.not('message', 'like', '[PRIV_ID:%'); }
+                if (forcedTag) { query = query.like('message', `${forcedTag}%`); }
+                else if (currentChatType === "private") { const tag = getPrivateTag(currentUserId, assistanceTargetId); query = query.like('message', `${tag}%`); }
+                else { query = query.not('message', 'like', '[PRIV_ID:%').not('message', 'like', '[QUORBY_AI:%'); }
                 if (isPinnedFilterActive) query = query.eq('is_pinned', true);
                 
                 const { data: msgs } = await query.order('created_at', { ascending: true });
@@ -1853,7 +1873,7 @@
                     for (const m of msgs) {
                         const isMe = String(m.auteur_id) === String(currentUserId);
                         const isSys = m.message?.includes('[SYSTEM_TAG]');
-                        if (!isMe && !isSys && !vuesIds.includes(m.id)) {
+                        if (!isMe && !isSys && !vuesIds.has(String(m.id))) {
                             firstUnreadId = m.id;
                             break;
                         }
@@ -1949,7 +1969,7 @@
                     const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El" && userShowReadMap[v.user_pseudo] !== false).map(v => v.user_pseudo).join(', ') || "" : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                     const time = formatTimeWithDay(c.created_at);
-                    if(!isMe && !vuesIds.includes(c.id)) markAsSeen(c.id);
+                    if(!isMe && !vuesIds.has(String(c.id))) markAsSeen(c.id);
                     
                     let fileHtml = "";
                     if (c.file_url) {
@@ -2017,11 +2037,29 @@
                 }
             }
 
-            async function markAsSeen(id) { 
-                if (!currentUser || localVuesIds.includes(id)) return; 
-                localVuesIds.push(id); 
-                await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' }); 
-                
+            // === PERSISTANCE LOCALE DES MESSAGES VUS ===
+            function _lsSeenKey() { return `seen_msgs_${currentUser}`; }
+            function _lsSeenLoad() {
+                try { return new Set(JSON.parse(localStorage.getItem(_lsSeenKey()) || '[]').map(String)); }
+                catch(e) { return new Set(); }
+            }
+            function _lsSeenSave(id) {
+                try {
+                    const s = _lsSeenLoad(); s.add(String(id));
+                    // Limiter à 2000 entrées pour ne pas gonfler localStorage
+                    const arr = Array.from(s);
+                    if (arr.length > 2000) arr.splice(0, arr.length - 2000);
+                    localStorage.setItem(_lsSeenKey(), JSON.stringify(arr));
+                } catch(e) {}
+            }
+            function _lsSeenHas(id) { return _lsSeenLoad().has(String(id)); }
+
+            async function markAsSeen(id) {
+                if (!currentUser || localVuesIds.includes(id)) return;
+                localVuesIds.push(id);
+                _lsSeenSave(id);
+                await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
+
                 // ✅ Supprimer les messages système de réaction une fois vus
                 const msg = allMessagesCache.find(m => m.id === id);
                 if (msg && msg.message.includes('[SYSTEM_TAG]')) {
@@ -2217,8 +2255,26 @@
                 const panel = document.getElementById('ai-panel');
                 panel.classList.toggle('open');
                 if (panel.classList.contains('open') && aiConversation.length === 0) {
-                    aiShowWelcome();
+                    loadQuorbyHistory();
                 }
+            }
+
+            async function loadQuorbyHistory() {
+                if (!currentUserId) { aiShowWelcome(); return; }
+                const { data } = await _supabase.from('commentaires')
+                    .select('auteur, message, created_at')
+                    .like('message', `[QUORBY_AI:${currentUserId}]%`)
+                    .order('created_at', { ascending: true })
+                    .limit(60);
+                if (!data || data.length === 0) { aiShowWelcome(); return; }
+                data.forEach(m => {
+                    const match = m.message.match(/^\[QUORBY_AI:[^\]]+\]\[(USER|BOT)\]([\s\S]*)$/);
+                    if (!match) return;
+                    const role = match[1] === 'USER' ? 'user' : 'bot';
+                    const content = match[2];
+                    aiAddBubble(role, content);
+                    aiConversation.push({ role: role === 'user' ? 'user' : 'assistant', content });
+                });
             }
 
             async function loadGlobalApiKey() {
@@ -2258,9 +2314,13 @@
                 aiAddBubble('bot', `Salut ${currentUser} ! 👋\nJe suis ton agent IA. Je peux :\n\n• Répondre à toutes tes questions\n• Ajouter ou supprimer des devoirs\n• Changer le thème de l'application\n• Envoyer des messages dans le chat\n• T'aider avec n'importe quoi d'autre\n\nComment puis-je t'aider ?`);
             }
 
-            function clearAIConversation() {
+            async function clearAIConversation() {
                 aiConversation = [];
                 document.getElementById('ai-messages').innerHTML = '';
+                // Supprimer l'historique Quorby de Supabase pour cet utilisateur
+                if (currentUserId) {
+                    await _supabase.from('commentaires').delete().like('message', `[QUORBY_AI:${currentUserId}]%`);
+                }
                 aiShowWelcome();
             }
 
@@ -2292,6 +2352,12 @@
                 input.style.height = 'auto';
                 aiAddBubble('user', text);
                 aiConversation.push({ role: 'user', content: text });
+                // Sauvegarder le message utilisateur dans Supabase
+                _supabase.from('commentaires').insert([{
+                    auteur: currentUser,
+                    auteur_id: currentUserId,
+                    message: `[QUORBY_AI:${currentUserId}][USER]${text}`
+                }]).then(({ error }) => { if (error) console.error('[Quorby] Erreur save user msg:', error.message); });
 
                 aiIsThinking = true;
                 const thinkingEl = aiAddBubble('bot', '...', 'ai-thinking');
@@ -2335,6 +2401,12 @@
 
                     const rawReply = data.choices?.[0]?.message?.content || '';
                     aiConversation.push({ role: 'assistant', content: rawReply });
+                    // Sauvegarder la réponse bot dans Supabase
+                    _supabase.from('commentaires').insert([{
+                        auteur: "Quorby 🤖",
+                        auteur_id: currentUserId,
+                        message: `[QUORBY_AI:${currentUserId}][BOT]${rawReply}`
+                    }]).then(({ error }) => { if (error) console.error('[Quorby] Erreur save bot msg:', error.message); });
 
                     // Extraire et exécuter les actions
                     const actionRegex = /\[ACTION:(\{.*?\})\]/gs;
