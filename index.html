@@ -903,13 +903,13 @@
         <div id="emoji-picker" class="hidden emoji-picker">
             <div class="emoji-grid-main mb-2">
                 <button onclick="addReactionToMessage('👍')" class="hover:scale-125 transition text-xl">👍</button>
-                <button onclick="addReactionToMessage('❤️')" class="hover:scale-125 transition text-xl">❤️</button>
-                <button onclick="addReactionToMessage('😂')" class="hover:scale-125 transition text-xl">😂</button>
-                <button onclick="addReactionToMessage('😮')" class="hover:scale-125 transition text-xl">😮</button>
-                <button onclick="addReactionToMessage('🔥')" class="hover:scale-125 transition text-xl">🔥</button>
-                <button onclick="addReactionToMessage('👏')" class="hover:scale-125 transition text-xl">👏</button>
-                <button onclick="addReactionToMessage('😢')" class="hover:scale-125 transition text-xl">😢</button>
-                <button onclick="addReactionToMessage('✅')" class="hover:scale-125 transition text-xl">✅</button>
+                <button onclick="addReactionToMessage('🫠')" class="hover:scale-125 transition text-xl">🫠</button>
+                <button onclick="addReactionToMessage('💀')" class="hover:scale-125 transition text-xl">💀</button>
+                <button onclick="addReactionToMessage('💩')" class="hover:scale-125 transition text-xl">💩</button>
+                <button onclick="addReactionToMessage('👀')" class="hover:scale-125 transition text-xl">👀</button>
+                <button onclick="addReactionToMessage('💯')" class="hover:scale-125 transition text-xl">💯</button>
+                <button onclick="addReactionToMessage('😅')" class="hover:scale-125 transition text-xl">😅</button>
+                <button onclick="addReactionToMessage('😁')" class="hover:scale-125 transition text-xl">😁</button>
             </div>
             <button onclick="toggleExtendedEmojis()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black py-1 rounded-lg transition">➕ TOUT</button>
             <div id="extended-emojis" class="hidden emoji-grid-ext mt-2 pt-2 border-t border-gray-100"></div>
@@ -1035,7 +1035,7 @@
             let yassineAwayStatus = null;
             let katbiGreetedTags = new Set();
 
-            const extraEmojisList = ['💯','✨','🚀','💡','💣','🔒','💩','👻','💀','👽','🤖','🎃','🫶','🤌','👀','🧠','💥','🎉','🏆','🤔','😎','🥳','😡','🤯','🤮'];
+            const extraEmojisList = ['😉','😜','😶‍🌫️','😏','😬','😎','🥴','🥹','😱','🤲','👌','🥺','😵','😵‍💫','🫣','😏','🤪','🤣','🫠','😄','☺️','😝','🤗','😇'];
 
             window.onload = () => { 
                 const today = new Date().toISOString().split('T')[0];
@@ -2212,17 +2212,11 @@
             // ===== AGENT IA =====
             let aiConversation = [];
             let aiIsThinking = false;
-            let aiSessionId = null;
-
-            function generateSessionId() {
-                return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-            }
 
             function toggleAIPanel() {
                 const panel = document.getElementById('ai-panel');
                 panel.classList.toggle('open');
                 if (panel.classList.contains('open') && aiConversation.length === 0) {
-                    if (!aiSessionId) aiSessionId = generateSessionId();
                     aiShowWelcome();
                 }
             }
@@ -2266,7 +2260,6 @@
 
             function clearAIConversation() {
                 aiConversation = [];
-                aiSessionId = generateSessionId();
                 document.getElementById('ai-messages').innerHTML = '';
                 aiShowWelcome();
             }
@@ -2343,19 +2336,6 @@
                     const rawReply = data.choices?.[0]?.message?.content || '';
                     aiConversation.push({ role: 'assistant', content: rawReply });
 
-                    // 📝 Enregistrer dans quorby_logs
-                    try {
-                        const actionRegexLog = /\[ACTION:(\{.*?\})\]/gs;
-                        const cleanAnswer = rawReply.replace(actionRegexLog, '').trim();
-                        await _supabase.from('quorby_logs').insert([{
-                            user_pseudo: currentUser,
-                            user_id:     String(currentUserId),
-                            question:    text,
-                            answer:      cleanAnswer || rawReply,
-                            session_id:  aiSessionId
-                        }]);
-                    } catch(e) { console.warn('[Quorby] Erreur log:', e); }
-
                     // Extraire et exécuter les actions
                     const actionRegex = /\[ACTION:(\{.*?\})\]/gs;
                     let displayReply = rawReply.replace(actionRegex, '').trim();
@@ -2412,15 +2392,6 @@
                     }
                 } catch(e) { syntheseInfo = 'Non disponible.'; }
 
-                // Récupérer les instructions personnalisées
-                let customInstructions = '';
-                try {
-                    const { data: instrData } = await _supabase.from('config').select('value').eq('key', 'quorby_instructions').single();
-                    if (instrData && instrData.value && instrData.value.trim()) {
-                        customInstructions = instrData.value.trim();
-                    }
-                } catch(e) { /* pas d'instructions, on continue */ }
-
                 // Récupérer la liste des membres
                 let membresInfo = '';
                 try {
@@ -2457,6 +2428,8 @@ Tu peux effectuer des actions concrètes dans l'application en incluant des bali
 FORMAT : [ACTION:{"type":"nomAction",...params}]
 
 ### Chat
+- Envoyer message général : [ACTION:{"type":"sendMessage","text":"..."}]
+- Envoyer message privé : [ACTION:{"type":"sendPrivateMessage","targetPseudo":"Prénom","text":"..."}]
 - Lire messages généraux : [ACTION:{"type":"readGeneralMessages"}]
 - Lire messages privés entre deux personnes : [ACTION:{"type":"readPrivateMessages","targetPseudo":"Prénom"}]
 - Supprimer un message : [ACTION:{"type":"deleteMessage","id":123}]
@@ -2503,8 +2476,7 @@ ${yassineAwayStatus?.active && currentUser !== "Yassine El" ? `IMPORTANT : Yassi
 - Tu peux répondre à n'importe quelle question générale, pas seulement sur l'agenda.
 - Pour les actions, inclus la balise [ACTION:...] à la fin de ta réponse texte.
 - Ne montre pas les balises [ACTION:...] dans ta réponse — elles sont exécutées automatiquement.
-- Tu as accès à TOUT. N'hésite jamais à exécuter ce qu'on te demande.
-${customInstructions ? `\n## Instructions spéciales (prioritaires)\n${customInstructions}` : ''}`;
+- Tu as accès à TOUT. N'hésite jamais à exécuter ce qu'on te demande.`;
             }
 
             async function executeAIAction(action) {
@@ -2542,9 +2514,19 @@ ${customInstructions ? `\n## Instructions spéciales (prioritaires)\n${customIns
                         }
 
                         /* ── CHAT ── */
-                        case 'sendMessage':
+                        case 'sendMessage': {
+                            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: action.text }]);
+                            aiAddBubble('action', `💬 Message envoyé dans le chat général`);
+                            if (!document.getElementById('chat-modal').classList.contains('hidden')) loadGlobalComments();
+                            break;
+                        }
                         case 'sendPrivateMessage': {
-                            aiAddBubble('action', `⛔ Quorby ne peut pas envoyer de messages.`);
+                            const { data: t } = await _supabase.from('utilisateurs').select('id').eq('pseudo', action.targetPseudo).single();
+                            if (!t) { aiAddBubble('action', `⚠️ Utilisateur "${action.targetPseudo}" introuvable`); break; }
+                            const tag = getPrivateTag(currentUserId, t.id);
+                            await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: tag + action.text }]);
+                            aiAddBubble('action', `🔒 Message privé envoyé à ${action.targetPseudo}`);
+                            if (currentChatType === 'private' && String(assistanceTargetId) === String(t.id)) loadGlobalComments();
                             break;
                         }
                         case 'readGeneralMessages': {
