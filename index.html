@@ -6,6 +6,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1202,15 +1204,19 @@
             function setupTypingListener() {
                 typingChannel = _supabase.channel('typing-indicator', { configs: { broadcast: { self: false } } })
                     .on('broadcast', { event: 'typing' }, (payload) => {
-                        const { user, target, chat } = payload.payload;
+                        const { user, target, chat, text } = payload.payload;
                         const indicator = document.getElementById('typing-indicator');
-                        
+
                         let shouldShow = false;
                         if (chat === "general" && currentChatType === "general") shouldShow = true;
                         if (chat === "private" && currentChatType === "private" && String(target) === String(currentUserId) && user === assistanceTargetUser) shouldShow = true;
 
                         if (shouldShow) {
-                            indicator.innerHTML = `<span class="italic text-[11px] font-bold text-blue-600">${user} est en train d'écrire...</span>`;
+                            if (chat === "private" && text != null && text !== "") {
+                                indicator.innerHTML = `<span class="italic text-[11px] font-bold text-blue-600">${escapeHTML(user)} écrit&nbsp;: <span style="background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.18);border-radius:8px;padding:1px 7px;font-style:normal;">${escapeHTML(text)}</span></span>`;
+                            } else {
+                                indicator.innerHTML = `<span class="italic text-[11px] font-bold text-blue-600">${escapeHTML(user)} est en train d'écrire...</span>`;
+                            }
                             clearTimeout(typingTimeout);
                             typingTimeout = setTimeout(() => { indicator.innerHTML = ""; }, 2000);
                         }
@@ -1255,10 +1261,11 @@
 
             function handleTyping() {
                 if (!typingChannel) return;
+                const text = document.getElementById('global-comment-text').value;
                 typingChannel.send({
                     type: 'broadcast',
                     event: 'typing',
-                    payload: { user: currentUser, target: assistanceTargetId, chat: currentChatType }
+                    payload: { user: currentUser, target: assistanceTargetId, chat: currentChatType, text: text }
                 });
             }
 
