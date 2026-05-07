@@ -1572,7 +1572,7 @@
             }
 
             async function openPrivateChat(targetPseudo, targetId) {
-                const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', targetId).eq('muted_id', currentUserId).single();
+                const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', targetId).eq('muted_id', currentUserId).maybeSingle();
                 if (isMutedByTarget) {
                     document.getElementById('mute-screen').style.display = 'flex';
                     return;
@@ -2160,7 +2160,7 @@
 
                 let finalMsg = "";
                 if (currentChatType === "private") {
-                    const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', assistanceTargetId).eq('muted_id', currentUserId).single();
+                    const { data: isMutedByTarget } = await _supabase.from('mutes').select('*').eq('muter_id', assistanceTargetId).eq('muted_id', currentUserId).maybeSingle();
                     if (isMutedByTarget) { document.getElementById('mute-screen').style.display = 'flex'; input.value = ""; return; }
                     finalMsg += getPrivateTag(currentUserId, assistanceTargetId);
                 }
