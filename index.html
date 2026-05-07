@@ -9,6 +9,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1986,7 +1988,7 @@
                     const detectedUrl = extractUrl(msgText);
                     const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
                     const isYassineViewing = currentUser === "Yassine El" && currentChatType === "private";
-                    const vStr = (allowShowVues || isYassineViewing)
+                    const vStr = (allowShowVues || isMe || isYassineViewing)
                         ? c.vues_messages?.filter(v => {
                             if (v.user_pseudo === "Yassine El") return false;
                             if (isYassineViewing) return true;
