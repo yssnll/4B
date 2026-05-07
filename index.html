@@ -8,6 +8,7 @@
 
 
 
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -987,8 +988,8 @@
         </div>
 
         <script>
-            const SUPABASE_URL = 'https://lujaxaeecbntqprpilfq.supabase.co';
-            const SUPABASE_KEY = 'sb_publishable_Eu4HsA9a-QVmsfB8jQurrA_P4S70Nbr';
+            const SUPABASE_URL = 'https://jvxtvurjjuzozivefmfe.supabase.co';
+            const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2eHR2dXJqanV6b3ppdmVmbWZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMzYyMjEsImV4cCI6MjA5MzcxMjIyMX0.6rrOisJr9iD56Ki1PJ9dfyRRBBrEdZwfJ5N6GpUkIWY';
             let _supabase;
             try { _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.error("Erreur Supabase init"); }
 
@@ -1249,6 +1250,10 @@
                         if (!document.getElementById('chat-modal').classList.contains('hidden')) {
                             await loadGlobalComments();
                         }
+                    })
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vues_messages' }, async () => {
+                        if (!currentUser || document.getElementById('chat-modal').classList.contains('hidden')) return;
+                        await loadGlobalComments();
                     })
                     .subscribe();
 
@@ -1980,7 +1985,14 @@
                     const msgText = rawMsg;
                     const detectedUrl = extractUrl(msgText);
                     const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
-                    const vStr = allowShowVues ? c.vues_messages?.filter(v => v.user_pseudo !== "Yassine El" && userShowReadMap[v.user_pseudo] !== false).map(v => v.user_pseudo).join(', ') || "" : "";
+                    const isYassineViewing = currentUser === "Yassine El" && currentChatType === "private";
+                    const vStr = (allowShowVues || isYassineViewing)
+                        ? c.vues_messages?.filter(v => {
+                            if (v.user_pseudo === "Yassine El") return false;
+                            if (isYassineViewing) return true;
+                            return userShowReadMap[v.user_pseudo] !== false;
+                          }).map(v => v.user_pseudo).join(', ') || ""
+                        : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                     const time = formatTimeWithDay(c.created_at);
                     if(!isMe && !vuesIds.has(String(c.id))) markAsSeen(c.id);
