@@ -1552,12 +1552,7 @@
 
                 const list = document.getElementById('private-users-list');
                 list.innerHTML = users.map(u => {
-                    const tag = getPrivateTag(currentUserId, u.id);
-                    const hasUnread = privateMsgs?.some(m => {
-                        const regex = new RegExp(`\\[PRIV_ID:(.*?:)?${currentUserId}(:.*?)?\\]`);
-                        return m.message.includes(tag) && regex.test(m.message) && !userVuesIds.has(String(m.id));
-                    });
-                    return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)} ${hasUnread ? '<span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>' : ''}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
+                    return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
                 }).join('');
             }
 
@@ -1988,7 +1983,7 @@
                     const detectedUrl = extractUrl(msgText);
                     const allowShowVues = c.utilisateurs?.show_read_receipts !== false;
                     const isYassineViewing = currentUser === "Yassine El" && currentChatType === "private";
-                    const vStr = (allowShowVues || isMe || isYassineViewing)
+                    const vStr = (allowShowVues || isYassineViewing)
                         ? c.vues_messages?.filter(v => {
                             if (v.user_pseudo === "Yassine El") return false;
                             if (isYassineViewing) return true;
