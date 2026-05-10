@@ -263,6 +263,25 @@
                 color: white !important;
                 animation: bell-pulse 1.5s infinite;
             }
+            .presence-dot {
+                display: inline-block;
+                width: 9px; height: 9px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                border: 1.5px solid rgba(255,255,255,0.8);
+                box-shadow: 0 0 0 0 transparent;
+                transition: background 0.3s;
+            }
+            .presence-dot.online {
+                background: #22c55e;
+                box-shadow: 0 0 0 3px rgba(34,197,94,0.25);
+                animation: presence-pulse 2s infinite;
+            }
+            .presence-dot.offline { background: #ef4444; }
+            @keyframes presence-pulse {
+                0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+                50%      { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+            }
             @keyframes bell-pulse {
                 0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
                 50%  { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(239,68,68,0); }
@@ -1035,9 +1054,11 @@
             let typingChannel;
             let typingTimeout;
             let isHistoryMode = false;
-            let localVuesIds = []; 
+            let localVuesIds = [];
             let replyToMsg = null;
             let allMessagesCache = [];
+            let presenceChannel = null;
+            let onlineUsers = new Set(); // pseudos en ligne (Supabase Presence)
             let reactionTargetId = null;
             let tempSystemMessages = [];
             let userHasPrivateAccess = false;
@@ -1242,6 +1263,50 @@
                     .subscribe();
 
                 setupMessageListener();
+                setupPresence();
+            }
+
+            // ── PRÉSENCE EN LIGNE (visible uniquement pour Yassine El) ──
+            function setupPresence() {
+                if (presenceChannel) { presenceChannel.unsubscribe(); presenceChannel = null; }
+                presenceChannel = _supabase.channel('presence-online', { config: { presence: { key: currentUser } } });
+                presenceChannel
+                    .on('presence', { event: 'sync' }, () => {
+                        const state = presenceChannel.presenceState();
+                        onlineUsers = new Set(Object.keys(state));
+                        if (currentUser === 'Yassine El') _updatePresenceUI();
+                    })
+                    .on('presence', { event: 'join' }, ({ key }) => {
+                        onlineUsers.add(key);
+                        if (currentUser === 'Yassine El') _updatePresenceUI();
+                    })
+                    .on('presence', { event: 'leave' }, ({ key }) => {
+                        onlineUsers.delete(key);
+                        if (currentUser === 'Yassine El') _updatePresenceUI();
+                    })
+                    .subscribe(async (status) => {
+                        if (status === 'SUBSCRIBED') {
+                            await presenceChannel.track({ pseudo: currentUser, at: Date.now() });
+                        }
+                    });
+            }
+
+            // Met à jour toutes les bulles de présence visibles
+            function _updatePresenceUI() {
+                // Bulle dans la liste des chats privés
+                document.querySelectorAll('[data-presence-pseudo]').forEach(el => {
+                    const pseudo = el.dataset.presencePseudo;
+                    el.className = onlineUsers.has(pseudo)
+                        ? 'presence-dot online'
+                        : 'presence-dot offline';
+                    el.title = onlineUsers.has(pseudo) ? 'En ligne' : 'Hors ligne';
+                });
+                // Bulle dans le titre du chat privé ouvert
+                const dot = document.getElementById('presence-dot-title');
+                if (dot && assistanceTargetUser) {
+                    dot.className = onlineUsers.has(assistanceTargetUser) ? 'presence-dot online' : 'presence-dot offline';
+                    dot.title = onlineUsers.has(assistanceTargetUser) ? 'En ligne' : 'Hors ligne';
+                }
             }
 
             function setupMessageListener() {
@@ -1555,7 +1620,10 @@
 
                 const list = document.getElementById('private-users-list');
                 list.innerHTML = users.map(u => {
-                    return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
+                    const presenceDot = (currentUser === 'Yassine El')
+                        ? `<span class="presence-dot ${onlineUsers.has(u.pseudo) ? 'online' : 'offline'}" data-presence-pseudo="${escapeHTML(u.pseudo)}" title="${onlineUsers.has(u.pseudo) ? 'En ligne' : 'Hors ligne'}"></span>`
+                        : '';
+                    return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)}${presenceDot}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
                 }).join('');
             }
 
@@ -1580,7 +1648,11 @@
 
                 currentChatType = "private"; assistanceTargetUser = targetPseudo; assistanceTargetId = targetId; isPinnedFilterActive = false; isHistoryMode = false; updatePinnedUI();
                 document.getElementById('chat-list-modal').classList.add('hidden');
-                document.getElementById('chat-title').innerHTML = `${escapeHTML(targetPseudo)}`;
+                const isYassineEl = currentUser === 'Yassine El';
+                const dotHtml = isYassineEl
+                    ? `<span id="presence-dot-title" class="presence-dot ${onlineUsers.has(targetPseudo) ? 'online' : 'offline'}" title="${onlineUsers.has(targetPseudo) ? 'En ligne' : 'Hors ligne'}"></span>`
+                    : '';
+                document.getElementById('chat-title').innerHTML = `${escapeHTML(targetPseudo)} ${dotHtml}`;
                 document.getElementById('btn-delete-convo').classList.remove('hidden');
                 document.getElementById('chat-modal').classList.remove('hidden'); loadGlobalComments();
             }
