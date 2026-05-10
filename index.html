@@ -11,6 +11,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1029,8 +1031,7 @@
             let assistanceTargetUser = ""; 
             let assistanceTargetId = ""; 
             let isPinnedFilterActive = false;
-            let privateUnreadList = []; 
-            let locallyDismissedIds = []; 
+            let privateUnreadList = [];
             let typingChannel;
             let typingTimeout;
             let isHistoryMode = false;
@@ -1248,14 +1249,16 @@
                 _supabase.channel('notif-realtime')
                     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commentaires' }, async () => {
                         if (!currentUser || document.getElementById('mute-screen').style.display === 'flex') return;
-                        await checkNewMessages();
+                        // Rafraîchir l'affichage sans marquer comme vu (markSeen=false)
+                        // Seule l'ouverture manuelle du chat marque les messages comme vus
                         if (!document.getElementById('chat-modal').classList.contains('hidden')) {
-                            await loadGlobalComments();
+                            await loadGlobalComments(null, false);
                         }
+                        await checkNewMessages();
                     })
                     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vues_messages' }, async () => {
                         if (!currentUser || document.getElementById('chat-modal').classList.contains('hidden')) return;
-                        await loadGlobalComments();
+                        await loadGlobalComments(null, false);
                     })
                     .subscribe();
 
@@ -1471,7 +1474,7 @@
                     console.error('[Quorby] Erreur insert message Quorby:', error.message, error.code);
                 }
                 if (!document.getElementById('chat-modal').classList.contains('hidden')) {
-                    loadGlobalComments();
+                    loadGlobalComments(null, false);
                 }
             }
 
@@ -1588,104 +1591,160 @@
                 renderBellNotifs();
             }
 
+            // ============================================================
+            // SYSTÈME NOTIFICATIONS — DB = source de vérité, localStorage = fallback
+            // ============================================================
+
+            function _vueToast(msg, ok) {
+                const t = document.createElement('div');
+                t.style.cssText = `position:fixed;bottom:${ok?'16':'52'}px;left:16px;background:${ok?'#16a34a':'#dc2626'};color:#fff;padding:8px 12px;border-radius:8px;z-index:99999;font-size:10px;max-width:400px;font-family:monospace;box-shadow:0 4px 12px rgba(0,0,0,.3)`;
+                t.textContent = msg;
+                document.body.appendChild(t);
+                setTimeout(() => t.remove(), ok ? 5000 : 15000);
+            }
+
+            async function markMessagesSeenInDB(ids) {
+                if (!ids || ids.length === 0 || !currentUser) return;
+                // Cache immédiat (même appareil)
+                ids.forEach(id => { if (!localVuesIds.includes(id)) localVuesIds.push(id); _lsSeenSave(id); });
+
+                try {
+                    // 1. Lire ce qui est déjà en DB
+                    const numIds = ids.map(Number);
+                    const { data: existing, error: selErr } = await _supabase
+                        .from('vues_messages').select('message_id')
+                        .eq('user_pseudo', currentUser).in('message_id', numIds);
+
+                    if (selErr) {
+                        _vueToast(`SELECT échoué (${selErr.code}): ${selErr.message}`, false);
+                        return;
+                    }
+
+                    const inDB = new Set((existing || []).map(r => String(r.message_id)));
+                    const toInsert = numIds.filter(id => !inDB.has(String(id)));
+
+                    if (toInsert.length === 0) return;
+
+                    // 2. INSERT uniquement les nouveaux
+                    const { error: insErr } = await _supabase.from('vues_messages')
+                        .insert(toInsert.map(id => ({ message_id: id, user_pseudo: currentUser })));
+
+                    if (insErr) {
+                        _vueToast(`INSERT échoué (${insErr.code}): ${insErr.message} — ${insErr.hint || ''}`, false);
+                        console.error('[VUE] INSERT error:', insErr);
+                        return;
+                    }
+
+                    // 3. Vérification : relire pour confirmer
+                    const { data: verify } = await _supabase.from('vues_messages')
+                        .select('message_id').eq('user_pseudo', currentUser).in('message_id', toInsert);
+                    if ((verify?.length || 0) === 0) {
+                        _vueToast(`ANOMALIE : INSERT sans erreur mais 0/${toInsert.length} lignes confirmées en DB. Vérifiez permissions Supabase.`, false);
+                    }
+
+                } catch(e) {
+                    _vueToast(`Exception markMessagesSeenInDB: ${e.message}`, false);
+                    console.error('[VUE] Exception:', e);
+                }
+            }
+
+
             function renderBellNotifs() {
                 const list = document.getElementById('bell-notif-list');
-                const activeNotifs = privateUnreadList.filter(n => !locallyDismissedIds.includes(n.id));
-                if (activeNotifs.length === 0) { list.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm italic">Aucune notification</div>`; return; }
-                list.innerHTML = activeNotifs.map(n => {
+                if (privateUnreadList.length === 0) {
+                    list.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm italic">Aucune notification</div>`;
+                    return;
+                }
+                list.innerHTML = privateUnreadList.map(n => {
                     const cleanMsg = n.message.replace(/\[PRIV_ID:.*?\]/, "").substring(0, 30) + "...";
                     return `<div class="p-4 bg-white/60 rounded-2xl border border-white/40 flex justify-between items-start gap-2 modal-animate"><div class="flex-1 cursor-pointer" onclick="document.getElementById('bell-modal').classList.add('hidden'); openPrivateChat('${escapeHTML(n.auteur)}', '${n.auteur_id}')"><p class="text-[10px] font-black text-blue-600 uppercase mb-1">${escapeHTML(n.auteur)}</p><p class="text-xs text-gray-700 font-medium">${escapeHTML(cleanMsg)}</p></div><button onclick="dismissBellNotif(${n.id})" class="p-1 text-gray-300 hover:text-red-500 transition-colors">✕</button></div>`;
                 }).join('');
             }
 
             function dismissBellNotif(id) {
-                // ✅ Marquer comme vu + supprimer de la base
                 (async () => {
-                    await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
+                    await markMessagesSeenInDB([id]);
                     await _supabase.from('commentaires').delete().eq('id', id);
-
-                    locallyDismissedIds.push(id);
-                    localVuesIds.push(id);
-                    _lsSeenSave(id);
-                    
-                    // ✅ Attendre un peu pour que la sync soit complète
-                    await new Promise(r => setTimeout(r, 200));
                     await checkNewMessages();
+                    renderBellNotifs();
                 })();
             }
+
             function dismissAllBellNotifs() {
-                // ✅ Marquer tous comme vus + supprimer
                 (async () => {
-                    for (const n of privateUnreadList) {
-                        await _supabase.from('vues_messages').upsert([{ message_id: n.id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
-                        localVuesIds.push(n.id);
-                        _lsSeenSave(n.id);
-
-                        if (n.message && n.message.includes('[SYSTEM_TAG]')) {
-                            await _supabase.from('commentaires').delete().eq('id', n.id);
+                    if (privateUnreadList.length > 0) {
+                        await markMessagesSeenInDB(privateUnreadList.map(m => m.id));
+                        for (const m of privateUnreadList) {
+                            if (m.message?.includes('[SYSTEM_TAG]'))
+                                await _supabase.from('commentaires').delete().eq('id', m.id);
                         }
-                        if(!locallyDismissedIds.includes(n.id)) locallyDismissedIds.push(n.id);
                     }
-                    
-                    // ✅ Attendre un peu pour que la sync soit complète
-                    await new Promise(r => setTimeout(r, 200));
                     await checkNewMessages();
                 })();
             }
 
-            function updateBellUI() {
-                const count = privateUnreadList.filter(n => !locallyDismissedIds.includes(n.id)).length;
+            function updateBellUI(count) {
                 const bell = document.getElementById('notif-bell');
                 const badge = document.getElementById('bell-count');
-                if (count > 0) { bell.classList.add('bell-active'); badge.innerText = count; badge.classList.remove('hidden'); document.getElementById('assistance-notif').style.display = 'block'; } 
-                else { bell.classList.remove('bell-active'); badge.classList.add('hidden'); document.getElementById('assistance-notif').style.display = 'none'; }
+                if (count > 0) {
+                    bell.classList.add('bell-active'); badge.innerText = count; badge.classList.remove('hidden');
+                    document.getElementById('assistance-notif').style.display = 'block';
+                } else {
+                    bell.classList.remove('bell-active'); badge.classList.add('hidden');
+                    document.getElementById('assistance-notif').style.display = 'none';
+                }
+            }
+
+            // Retourne un Set des IDs déjà vus pour une liste précise d'IDs de messages.
+            // Jamais de requête "tous les IDs" → contourne la limite 1000 lignes de Supabase.
+            async function seenSetForIds(msgIds) {
+                if (!msgIds || msgIds.length === 0) return new Set();
+                const { data } = await _supabase.from('vues_messages')
+                    .select('message_id').eq('user_pseudo', currentUser).in('message_id', msgIds);
+                const set = new Set((data || []).map(v => String(v.message_id)));
+                localVuesIds.forEach(id => set.add(String(id)));
+                _lsSeenLoad().forEach(id => set.add(id));
+                return set;
             }
 
             async function checkNewMessages() {
                 if (!currentUser) return;
-                const { data: vues } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
-                // Normaliser tout en strings pour éviter les mismatch de types int/string
-                const lsSeen = _lsSeenLoad();
-                const vuesIds = new Set([
-                    ...(vues?.map(v => String(v.message_id)) || []),
-                    ...localVuesIds.map(String),
-                    ...lsSeen
-                ]);
-                
-                const { data: genMsgs } = await _supabase.from('commentaires').select('id').is('devoir_id', null).eq('is_deleted', false).not('message', 'like', '[PRIV_ID:%').not('message', 'like', '[QUORBY_AI:%').neq('auteur_id', currentUserId);
-                const hasUnreadGen = genMsgs?.some(m => !vuesIds.has(String(m.id)));
-                document.getElementById('chat-notif').style.display = hasUnreadGen ? 'block' : 'none';
 
-                const { data: privMsgs } = await _supabase.from('commentaires')
-                    .select('id, message, auteur, auteur_id')
-                    .is('devoir_id', null)
-                    .eq('is_deleted', false)
-                    .or(`message.like.%:${currentUserId}:%,message.like.%:${currentUserId}]%`) 
+                // Point rouge chat général : fetch messages puis vues ciblées
+                const { data: genMsgs } = await _supabase.from('commentaires')
+                    .select('id').is('devoir_id', null).eq('is_deleted', false)
+                    .not('message', 'like', '[PRIV_ID:%').not('message', 'like', '[QUORBY_AI:%')
                     .neq('auteur_id', currentUserId);
-
-                const filteredPriv = privMsgs?.filter(m => {
-                    const tagMatch = m.message.match(/\[PRIV_ID:([^:]+):([^\]]+)\]/);
-                    if (!tagMatch) return false;
-                    return tagMatch[1] === String(currentUserId) || tagMatch[2] === String(currentUserId);
-                }) || [];
-
-                privateUnreadList = filteredPriv.filter(m => !vuesIds.has(String(m.id)));
-
-                // Marquer les notifications de réaction comme lues (dismissed) UNIQUEMENT si le chat privé est ouvert
-                const isChatModalOpen = !document.getElementById('chat-modal').classList.contains('hidden');
-                if (currentChatType === "private" && isChatModalOpen) {
-                    privateUnreadList.forEach(m => {
-                        if (m.message && m.message.includes('[SYSTEM_TAG]')) {
-                            // ✅ Supprimer les messages système de réaction automatiquement
-                            _supabase.from('commentaires').delete().eq('id', m.id);
-                        }
-                        if (!locallyDismissedIds.includes(m.id)) {
-                            locallyDismissedIds.push(m.id);
-                        }
-                    });
+                if (genMsgs && genMsgs.length > 0) {
+                    const genSeen = await seenSetForIds(genMsgs.map(m => m.id));
+                    document.getElementById('chat-notif').style.display =
+                        genMsgs.some(m => !genSeen.has(String(m.id))) ? 'block' : 'none';
+                } else {
+                    document.getElementById('chat-notif').style.display = 'none';
                 }
 
-                updateBellUI();
+                // Messages privés pour moi
+                const { data: privMsgs } = await _supabase.from('commentaires')
+                    .select('id, message, auteur, auteur_id')
+                    .is('devoir_id', null).eq('is_deleted', false)
+                    .or(`message.like.%:${currentUserId}:%,message.like.%:${currentUserId}]%`)
+                    .neq('auteur_id', currentUserId);
+
+                const forMe = (privMsgs || []).filter(m => {
+                    const tag = m.message.match(/\[PRIV_ID:([^:]+):([^\]]+)\]/);
+                    if (!tag) return false;
+                    return tag[1] === String(currentUserId) || tag[2] === String(currentUserId);
+                });
+
+                if (forMe.length === 0) { privateUnreadList = []; updateBellUI(0); return; }
+
+                // Vues ciblées uniquement pour ces messages (pas de limite 1000)
+                const privSeen = await seenSetForIds(forMe.map(m => m.id));
+                privateUnreadList = forMe.filter(m => !privSeen.has(String(m.id)));
+
+                // NE PAS marquer comme vu ici — c'est loadGlobalComments qui le fait
+                // quand les messages sont réellement affichés à l'écran.
+                updateBellUI(privateUnreadList.length);
             }
 
             async function openAdminHistory() {
@@ -1854,34 +1913,41 @@
                 loadGlobalComments();
             }
 
-            async function loadGlobalComments(forcedTag = null) {
+            // markSeen = true  : ouverture manuelle du chat → écriture des vues en DB
+            // markSeen = false : actualisation automatique (realtime) → affichage seul, aucune écriture
+            async function loadGlobalComments(forcedTag = null, markSeen = true) {
                 const cont = document.getElementById('global-comments-container');
                 const isBottom = cont.scrollHeight - cont.clientHeight <= cont.scrollTop + 50;
                 const isFirst = cont.innerHTML === "";
-                const { data: vuesServ } = await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser);
-                const lsSeenChat = _lsSeenLoad();
-                const vuesIds = new Set([
-                    ...(vuesServ?.map(v => String(v.message_id)) || []),
-                    ...localVuesIds.map(String),
-                    ...lsSeenChat
-                ]);
-                // Identifier le premier message non lu (pas de moi) avant de construire le HTML
                 let firstUnreadId = null;
-                
+
                 // Récupérer les infos des utilisateurs pour filtrer les vues
                 const { data: allUsers } = await _supabase.from('utilisateurs').select('pseudo, show_read_receipts');
                 const userShowReadMap = {};
                 allUsers?.forEach(u => { userShowReadMap[u.pseudo] = u.show_read_receipts !== false; });
-                
+
                 let query = _supabase.from('commentaires').select('*, vues_messages(user_pseudo), utilisateurs!auteur_id(show_read_receipts)').is('devoir_id', null);
                 if (!isHistoryMode) { query = query.eq('is_deleted', false); }
                 if (forcedTag) { query = query.like('message', `${forcedTag}%`); }
                 else if (currentChatType === "private") { const tag = getPrivateTag(currentUserId, assistanceTargetId); query = query.like('message', `${tag}%`); }
                 else { query = query.not('message', 'like', '[PRIV_ID:%').not('message', 'like', '[QUORBY_AI:%'); }
                 if (isPinnedFilterActive) query = query.eq('is_pinned', true);
-                
+
                 const { data: msgs } = await query.order('created_at', { ascending: true });
                 if (!msgs) return;
+
+                // Vues ciblées uniquement pour les messages affichés → jamais de limite 1000
+                const msgIds = msgs.map(m => m.id);
+                const { data: vuesServ } = msgIds.length > 0
+                    ? await _supabase.from('vues_messages').select('message_id').eq('user_pseudo', currentUser).in('message_id', msgIds)
+                    : { data: [] };
+                // dbSeenIds = uniquement DB + cache session → sert à décider quoi écrire en DB
+                const dbSeenIds = new Set([
+                    ...(vuesServ?.map(v => String(v.message_id)) || []),
+                    ...localVuesIds.map(String)
+                ]);
+                // vuesIds = dbSeenIds + localStorage → sert uniquement à l'affichage (séparateur non-lus)
+                const vuesIds = new Set([...dbSeenIds, ..._lsSeenLoad()]);
                 allMessagesCache = msgs;
 
                 // Trouver le premier message non lu (pas de moi, pas système)
@@ -1897,6 +1963,7 @@
                 }
 
                 let html = ""; let lastAid = "";
+                const unseenIds = []; // collecte des IDs à marquer vus en batch
                 msgs.forEach(c => {
                     if (c.message) {
                         const sysMatch = c.message.match(/^\[SYSTEM_TAG\]\s*(.*)$/);
@@ -1992,7 +2059,8 @@
                         : "";
                     let vuesHtml = vStr ? `<div class="seen-list" ${isMe ? 'style="display:block"' : ''}>✓ Vu par ${escapeHTML(vStr)}</div>` : '<div></div>';
                     const time = formatTimeWithDay(c.created_at);
-                    if(!isMe && !vuesIds.has(String(c.id))) markAsSeen(c.id);
+                    // Utiliser dbSeenIds (pas vuesIds) : localStorage ne doit pas bloquer l'écriture en DB
+                    if(!isMe && !dbSeenIds.has(String(c.id))) unseenIds.push(c.id);
                     
                     let fileHtml = "";
                     if (c.file_url) {
@@ -2048,16 +2116,26 @@
                 if (isFirst) {
                     const sep = document.getElementById('unread-separator');
                     if (sep) {
-                        // Petit délai pour que le DOM soit rendu avant de scroller
-                        requestAnimationFrame(() => {
-                            sep.scrollIntoView({ block: 'center' });
-                        });
+                        requestAnimationFrame(() => { sep.scrollIntoView({ block: 'center' }); });
                     } else {
                         cont.scrollTop = cont.scrollHeight;
                     }
                 } else if (isBottom) {
                     cont.scrollTop = cont.scrollHeight;
                 }
+
+                // Écrire les vues en DB uniquement si l'utilisateur a manuellement ouvert ce chat
+                if (!isHistoryMode && markSeen && unseenIds.length > 0) {
+                    await markMessagesSeenInDB(unseenIds);
+                    unseenIds.forEach(id => _lsSeenSave(id));
+                    for (const id of unseenIds) {
+                        const msg = allMessagesCache.find(m => m.id === id);
+                        if (msg?.message?.includes('[SYSTEM_TAG]'))
+                            _supabase.from('commentaires').delete().eq('id', id);
+                    }
+                }
+
+                if (!isHistoryMode) await checkNewMessages();
             }
 
             // === PERSISTANCE LOCALE DES MESSAGES VUS ===
@@ -2077,11 +2155,10 @@
             }
             function _lsSeenHas(id) { return _lsSeenLoad().has(String(id)); }
 
-            async function markAsSeen(id) {
+async function markAsSeen(id) {
                 if (!currentUser || localVuesIds.includes(id)) return;
-                localVuesIds.push(id);
                 _lsSeenSave(id);
-                await _supabase.from('vues_messages').upsert([{ message_id: id, user_pseudo: currentUser }], { onConflict: 'message_id, user_pseudo' });
+                await markMessagesSeenInDB([id]);
 
                 // ✅ Supprimer les messages système de réaction une fois vus
                 const msg = allMessagesCache.find(m => m.id === id);
@@ -2624,7 +2701,7 @@ ${quorbyCustomInstructions ? `\n## Instructions personnalisées (priorité haute
                         case 'sendMessage': {
                             await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: action.text }]);
                             aiAddBubble('action', `💬 Message envoyé dans le chat général`);
-                            if (!document.getElementById('chat-modal').classList.contains('hidden')) loadGlobalComments();
+                            if (!document.getElementById('chat-modal').classList.contains('hidden')) loadGlobalComments(null, false);
                             break;
                         }
                         case 'sendPrivateMessage': {
