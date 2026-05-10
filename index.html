@@ -13,6 +13,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -22,6 +24,7 @@
         
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
         
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
         
@@ -388,32 +391,22 @@
                 padding: 0 3px;
             }
 
-            /* ===== EMOJI PICKER ===== */
-            .emoji-picker {
+            /* ===== EMOJI PICKER (natif via emoji-picker-element) ===== */
+            #emoji-picker-wrapper {
                 position: fixed;
                 z-index: 1000;
-                background: rgba(255,255,255,0.88);
-                backdrop-filter: blur(20px) saturate(200%);
-                -webkit-backdrop-filter: blur(20px) saturate(200%);
-                padding: 12px;
-                border-radius: 20px;
-                box-shadow: 0 16px 48px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,1);
-                border: 1px solid rgba(255,255,255,0.8);
-                width: 210px;
-                max-height: 260px;
-                overflow-y: auto;
+                box-shadow: 0 16px 48px rgba(0,0,0,0.18);
+                border-radius: 16px;
+                overflow: hidden;
+                display: none;
             }
-            .emoji-grid-main {
-                display: grid;
-                grid-template-columns: repeat(4, 1fr);
-                gap: 8px;
-                text-align: center;
-            }
-            .emoji-grid-ext {
-                display: grid;
-                grid-template-columns: repeat(5, 1fr);
-                gap: 6px;
-                text-align: center;
+            #emoji-picker-wrapper.open { display: block; }
+            emoji-picker {
+                --border-radius: 16px;
+                --background: rgba(255,255,255,0.96);
+                --border-color: rgba(255,255,255,0.8);
+                width: 352px;
+                height: 400px;
             }
 
             /* ===== BUTTONS GLASS ===== */
@@ -928,20 +921,12 @@
             </div>
         </div>
 
-        <div id="emoji-picker" class="hidden emoji-picker">
-            <div class="emoji-grid-main mb-2">
-                <button onclick="addReactionToMessage('👍')" class="hover:scale-125 transition text-xl">👍</button>
-                <button onclick="addReactionToMessage('🫠')" class="hover:scale-125 transition text-xl">🫠</button>
-                <button onclick="addReactionToMessage('💀')" class="hover:scale-125 transition text-xl">💀</button>
-                <button onclick="addReactionToMessage('💩')" class="hover:scale-125 transition text-xl">💩</button>
-                <button onclick="addReactionToMessage('👀')" class="hover:scale-125 transition text-xl">👀</button>
-                <button onclick="addReactionToMessage('💯')" class="hover:scale-125 transition text-xl">💯</button>
-                <button onclick="addReactionToMessage('😅')" class="hover:scale-125 transition text-xl">😅</button>
-                <button onclick="addReactionToMessage('😁')" class="hover:scale-125 transition text-xl">😁</button>
-            </div>
-            <button onclick="toggleExtendedEmojis()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black py-1 rounded-lg transition">➕ TOUT</button>
-            <div id="extended-emojis" class="hidden emoji-grid-ext mt-2 pt-2 border-t border-gray-100"></div>
+        <!-- Picker emoji universel (Windows / Mac / mobile) -->
+        <div id="emoji-picker-wrapper">
+            <emoji-picker></emoji-picker>
         </div>
+        <!-- Div conservé pour éviter les erreurs JS (classList.add hidden) -->
+        <div id="emoji-picker" class="hidden"></div>
 
         <div id="detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/5 backdrop-blur-sm">
             <div class="glass-card w-full max-w-2xl max-h-[90vh] rounded-[2.5rem] overflow-hidden flex flex-col modal-animate">
@@ -1877,29 +1862,36 @@
             }
 
             /* --- LOGIQUE REACTIONS --- */
-            function openEmojiPicker(id, event) {
-                reactionTargetId = id;
-                const picker = document.getElementById('emoji-picker');
-                picker.style.left = event.clientX + 'px';
-                picker.style.top = event.clientY + 'px';
-                picker.classList.remove('hidden');
-                
-                // Fermer le menu étendu à chaque nouvelle ouverture
-                const ext = document.getElementById('extended-emojis');
-                ext.classList.add('hidden');
-            }
+            (function setupEmojiPicker() {
+                const wrapper = document.getElementById('emoji-picker-wrapper');
+                const picker = wrapper.querySelector('emoji-picker');
 
-            function toggleExtendedEmojis() {
-                const ext = document.getElementById('extended-emojis');
-                if (ext.classList.contains('hidden')) {
-                    ext.classList.remove('hidden');
-                    if (ext.innerHTML === "") {
-                        ext.innerHTML = extraEmojisList.map(e => `<button onclick="addReactionToMessage('${e}')" class="hover:scale-125 transition text-xl">${e}</button>`).join('');
-                    }
-                } else {
-                    ext.classList.add('hidden');
+                function openEmojiPicker(id, event) {
+                    reactionTargetId = id;
+                    const margin = 8;
+                    const pw = 352, ph = 400;
+                    let x = event.clientX, y = event.clientY;
+                    if (x + pw + margin > window.innerWidth)  x = window.innerWidth - pw - margin;
+                    if (y + ph + margin > window.innerHeight) y = y - ph;
+                    if (x < margin) x = margin;
+                    if (y < margin) y = margin;
+                    wrapper.style.left = x + 'px';
+                    wrapper.style.top  = y + 'px';
+                    wrapper.classList.add('open');
                 }
-            }
+                window.openEmojiPicker = openEmojiPicker;
+
+                picker.addEventListener('emoji-click', (e) => {
+                    wrapper.classList.remove('open');
+                    addReactionToMessage(e.detail.unicode);
+                });
+
+                document.addEventListener('mousedown', (e) => {
+                    if (!wrapper.contains(e.target) && !e.target.classList.contains('reaction-trigger')) {
+                        wrapper.classList.remove('open');
+                    }
+                });
+            })();
 
             async function addReactionToMessage(emoji) {
                 document.getElementById('emoji-picker').classList.add('hidden');
@@ -2415,12 +2407,6 @@ async function markAsSeen(id) {
 
             // Polling de secours global toutes les 15s (doublon supprimé — géré dans setupMessageListener)
 
-            window.addEventListener('mousedown', (e) => {
-                const picker = document.getElementById('emoji-picker');
-                if (!picker.contains(e.target) && !e.target.classList.contains('reaction-trigger') && !e.target.innerText.includes('➕ TOUT')) {
-                    picker.classList.add('hidden');
-                }
-            });
 
             // ===== AGENT IA =====
             let aiConversation = [];
