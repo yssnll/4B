@@ -829,7 +829,7 @@
 
         <div id="chat-list-modal" class="hidden fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
             <div class="glass-card w-full max-w-md p-8 rounded-[2.5rem] modal-animate">
-                <h2 class="text-2xl font-bold mb-6">Conversations Privées</h2>
+                <h2 class="text-2xl font-bold mb-6">Conversations Privées<span id="online-count-badge"></span></h2>
                 <div id="private-users-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2"></div>
                 <button onclick="document.getElementById('chat-list-modal').classList.add('hidden')" class="w-full mt-6 py-3 bg-gray-200 rounded-xl font-bold">Fermer</button>
             </div>
@@ -1291,8 +1291,17 @@
                     });
             }
 
+            function _updateOnlineCountBadge() {
+                const badge = document.getElementById('online-count-badge');
+                if (!badge || currentUser !== 'Yassine El') return;
+                // Compter les utilisateurs en ligne sauf Yassine El lui-même
+                const count = [...onlineUsers].filter(p => p !== 'Yassine El').length;
+                badge.textContent = count > 0 ? ` (${count})` : '';
+            }
+
             // Met à jour toutes les bulles de présence visibles
             function _updatePresenceUI() {
+                _updateOnlineCountBadge();
                 // Bulle dans la liste des chats privés
                 document.querySelectorAll('[data-presence-pseudo]').forEach(el => {
                     const pseudo = el.dataset.presencePseudo;
@@ -1625,6 +1634,7 @@
                         : '';
                     return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)}${presenceDot}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
                 }).join('');
+                _updateOnlineCountBadge();
             }
 
             function getPrivateTag(id1, id2) {
