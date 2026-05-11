@@ -1027,16 +1027,16 @@
             try { _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.error("Erreur Supabase init"); }
 
             const schedule = {
-                "08:15": ["Français", "Anglais", "Géographie", "Néerlandais", "Néerlandais"],
-                "09:20": ["Chimie", "Anglais", "Français", "Néerlandais", "Néerlandais"],
-                "10:10": ["Chimie", "Physique", "Français", "Histoire", "Géographie"],
+                "08:15": ["Physique", "Anglais", "Géographie", "Néerlandais", "Néerlandais"],
+                "09:20": ["Physique", "Anglais", "Néerlandais", "Chimie", "Néerlandais"],
+                "10:10": ["Anglais", "Histoire", "Français", "Chimie", "Géographie"],
                 "11:00": ["PAUSE", "PAUSE", "PAUSE", "PAUSE", "PAUSE"],
-                "11:20": ["Anglais", "Histoire", "Biologie", "Religion", "Français"],
-                "12:10": ["Anglais", "Mathématiques", "Physique", "Religion", "Français"],
+                "11:20": ["Français", "Histoire", "Biologie", "Religion", "Français"],
+                "12:10": ["Français", "Mathématiques", "Anglais", "Religion", "Français"],
                 "13:00": ["PAUSE", "PAUSE", "PAUSE", "PAUSE", "PAUSE"],
-                "14:15": ["Mathématiques", "Mathématiques", "Cours Vide", "Cours Vide", "Cours Vide"],
+                "14:15": ["Mathématiques", "Mathématiques", "Cours Vide", "Mathématiques", "Cours Vide"],
                 "15:20": ["Cours Vide", "EPS", "Cours Vide", "Mathématiques", "Cours Vide"],
-                "16:10": ["Cours Vide", "EPS", "Cours Vide", "Mathématique", "Cours Vide"]
+                "16:10": ["Cours Vide", "EPS", "Cours Vide", "Cours Vide", "Cours Vide"]
             };
 
             const themes = {
