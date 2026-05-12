@@ -384,34 +384,13 @@
                 font-size: 12px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,1);
             }
-            .reaction-item { cursor: pointer; transition: transform 0.15s var(--spring); display: inline-flex; align-items: center; gap: 2px; }
+            .reaction-item { cursor: pointer; transition: transform 0.15s var(--spring); }
             .reaction-item:hover { transform: scale(1.4); }
-            .reaction-count { font-size: 11px; font-weight: 700; color: #374151; line-height: 1; }
             .reaction-user-active {
                 background: rgba(37, 99, 235, 0.12);
                 border: 1px solid rgba(37, 99, 235, 0.3);
                 border-radius: 8px;
                 padding: 0 3px;
-            }
-            .reaction-user-active .reaction-count { color: #2563eb; }
-            #reaction-names-popup {
-                display: none;
-                position: fixed;
-                z-index: 2000;
-                background: rgba(25, 25, 35, 0.92);
-                color: #fff;
-                padding: 8px 14px;
-                border-radius: 20px;
-                font-size: 13px;
-                font-weight: 600;
-                pointer-events: none;
-                max-width: 240px;
-                text-align: center;
-                white-space: pre-line;
-                line-height: 1.5;
-                box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-                backdrop-filter: blur(8px);
-                transition: opacity 0.2s;
             }
 
             /* ===== EMOJI PICKER (natif via emoji-picker-element) ===== */
@@ -950,8 +929,6 @@
         </div>
         <!-- Div conservé pour éviter les erreurs JS (classList.add hidden) -->
         <div id="emoji-picker" class="hidden"></div>
-        <!-- Popup noms réactions (mobile/tactile) -->
-        <div id="reaction-names-popup"></div>
 
         <div id="detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/5 backdrop-blur-sm">
             <div class="glass-card w-full max-w-2xl max-h-[90vh] rounded-[2.5rem] overflow-hidden flex flex-col modal-animate">
@@ -1027,16 +1004,16 @@
             try { _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.error("Erreur Supabase init"); }
 
             const schedule = {
-                "08:15": ["Physique", "Anglais", "Géographie", "Néerlandais", "Néerlandais"],
-                "09:20": ["Physique", "Anglais", "Néerlandais", "Chimie", "Néerlandais"],
-                "10:10": ["Anglais", "Histoire", "Français", "Chimie", "Géographie"],
-                "11:00": ["PAUSE", "PAUSE", "PAUSE", "PAUSE", "PAUSE"],
-                "11:20": ["Français", "Histoire", "Biologie", "Religion", "Français"],
-                "12:10": ["Français", "Mathématiques", "Anglais", "Religion", "Français"],
-                "13:00": ["PAUSE", "PAUSE", "PAUSE", "PAUSE", "PAUSE"],
-                "14:15": ["Mathématiques", "Mathématiques", "Cours Vide", "Mathématiques", "Cours Vide"],
-                "15:20": ["Cours Vide", "EPS", "Cours Vide", "Mathématiques", "Cours Vide"],
-                "16:10": ["Cours Vide", "EPS", "Cours Vide", "Cours Vide", "Cours Vide"]
+                "08:15": ["Français",        "Anglais",       "Géographie", "Néerlandais",  "Néerlandais"],
+                "09:20": ["Chimie",           "Anglais",       "Français",   "Néerlandais",  "Néerlandais"],
+                "10:10": ["Chimie",           "Physique",      "Français",   "Histoire",     "Géographie"],
+                "11:00": ["PAUSE",            "PAUSE",         "PAUSE",      "PAUSE",        "PAUSE"],
+                "11:20": ["Anglais",          "Histoire",      "Biologie",   "Religion",     "Français"],
+                "12:10": ["Anglais",          "Mathématiques", "Biologie",   "Religion",     "Français"],
+                "13:00": ["PAUSE",            "PAUSE",         "PAUSE",      "PAUSE",        "PAUSE"],
+                "14:15": ["Mathématiques",    "Mathématiques", "Cours Vide", "Mathématiques","Cours Vide"],
+                "15:20": ["Cours Vide",       "EPS",           "Cours Vide", "Mathématiques","Cours Vide"],
+                "16:10": ["Cours Vide",       "EPS",           "Cours Vide", "Cours Vide",   "Cours Vide"]
             };
 
             const themes = {
@@ -1070,7 +1047,6 @@
             let presenceChannel = null;
             let onlineUsers = new Set(); // pseudos en ligne (Supabase Presence)
             let reactionTargetId = null;
-            let userIdToName = {};
             let tempSystemMessages = [];
             let userHasPrivateAccess = false;
             let yassineAwayStatus = null;
@@ -1223,7 +1199,7 @@
                         }
                     }
                     // ----------------------------------------------------
-                    updateWelcomeUI(); initApp(); loadAllUsers();
+                    updateWelcomeUI(); initApp();
                     setupTypingListener();
                     loadGlobalApiKey();
                     if (currentUser === "Yassine El") {
@@ -1528,11 +1504,6 @@
             }
 
             function initApp() { generateGrid(); fetchDevoirs(); checkNewMessages(); loadYassineAwayStatus(); }
-
-            async function loadAllUsers() {
-                const { data } = await _supabase.from('utilisateurs').select('id, pseudo');
-                if (data) data.forEach(u => { userIdToName[u.id] = u.pseudo; });
-            }
 
             async function loadYassineAwayStatus() {
                 try {
@@ -1924,74 +1895,6 @@
                 });
             })();
 
-            /* --- TOUCH HANDLER RÉACTIONS (mobile / iPad) --- */
-            (function setupReactionTouch() {
-                let _popup = null;
-                let _hideTimer = null;
-                let _pendingRemove = null;
-
-                function getPopup() {
-                    if (!_popup) _popup = document.getElementById('reaction-names-popup');
-                    return _popup;
-                }
-
-                function showPopup(el, text) {
-                    const p = getPopup();
-                    p.textContent = text;
-                    p.style.display = 'block';
-                    p.style.opacity = '1';
-                    const rect = el.getBoundingClientRect();
-                    const pw = Math.min(240, window.innerWidth - 16);
-                    p.style.maxWidth = pw + 'px';
-                    let x = rect.left + rect.width / 2 - pw / 2;
-                    if (x < 8) x = 8;
-                    if (x + pw > window.innerWidth - 8) x = window.innerWidth - pw - 8;
-                    p.style.left = x + 'px';
-                    p.style.top = Math.max(8, rect.top - 56) + 'px';
-                    clearTimeout(_hideTimer);
-                    _hideTimer = setTimeout(() => { p.style.opacity = '0'; setTimeout(() => { p.style.display = 'none'; }, 200); }, 2500);
-                }
-
-                document.addEventListener('touchend', function(e) {
-                    const item = e.target.closest('.reaction-item');
-                    if (!item) {
-                        // tap ailleurs = annule le pending
-                        if (_pendingRemove) { clearTimeout(_pendingRemove.timer); _pendingRemove = null; }
-                        return;
-                    }
-                    e.preventDefault();
-
-                    const names = item.dataset.names || '';
-                    const canRemove = item.dataset.canRemove === '1';
-                    // Convertir en nombre pour matcher l'id numérique de allMessagesCache
-                    const msgId = Number(item.dataset.msgId);
-                    const emoji = item.dataset.emoji;
-
-                    const isSamePending = _pendingRemove
-                        && _pendingRemove.msgId === msgId
-                        && _pendingRemove.emoji === emoji;
-
-                    if (canRemove && isSamePending) {
-                        clearTimeout(_pendingRemove.timer);
-                        _pendingRemove = null;
-                        removeReaction(msgId, emoji);
-                        showPopup(item, 'Réaction retirée ✓');
-                    } else {
-                        if (_pendingRemove) { clearTimeout(_pendingRemove.timer); _pendingRemove = null; }
-                        let popupText = names || emoji;
-                        if (canRemove) {
-                            popupText += '\n(retaper pour retirer)';
-                            _pendingRemove = { msgId, emoji, timer: setTimeout(() => { _pendingRemove = null; }, 2800) };
-                        }
-                        showPopup(item, popupText);
-                    }
-                }, { passive: false });
-            })();
-
-            function handleReactionClickDesktop(msgId, emoji, userHasReacted) {
-                if (userHasReacted) removeReaction(msgId, emoji);
-            }
-
             async function addReactionToMessage(emoji) {
                 document.getElementById('emoji-picker').classList.add('hidden');
                 const msg = allMessagesCache.find(m => m.id === reactionTargetId);
@@ -2211,15 +2114,7 @@
                                 let userHasReacted = Array.isArray(data) && data.includes(currentUserId);
                                 
                                 if (count > 0) {
-                                    let names = '';
-                                    if (Array.isArray(data) && data.length > 0) {
-                                        names = data.map(id => userIdToName[id] || id).join(', ');
-                                    }
-                                    const tooltipText = names
-                                        ? (userHasReacted ? `${names}\nCliquer pour retirer` : names)
-                                        : (userHasReacted ? 'Cliquer pour retirer' : '');
-                                    const safeNames = names.replace(/"/g, '&quot;');
-                                    reactionsHtml += `<span class="reaction-item ${userHasReacted ? 'reaction-user-active' : ''}" onclick="handleReactionClickDesktop(${c.id}, '${emoji}', ${userHasReacted})" data-names="${safeNames}" data-can-remove="${userHasReacted ? '1' : '0'}" data-msg-id="${c.id}" data-emoji="${emoji}" title="${tooltipText}">${emoji}${count > 1 ? `<span class="reaction-count">${count}</span>` : ''}</span>`;
+                                    reactionsHtml += `<span class="reaction-item ${userHasReacted ? 'reaction-user-active' : ''}" onclick="removeReaction(${c.id}, '${emoji}')" title="${userHasReacted ? 'Cliquer pour retirer' : 'Tu ne peux retirer que tes réactions'}">${emoji}${count > 1 ? count : ''}</span>`;
                                 }
                             }
                             reactionsHtml += `</div>`;
