@@ -1,0 +1,22 @@
+{
+  "name": "Agenda Scolaire 4-B",
+  "short_name": "Agenda 4-B",
+  "description": "Agenda scolaire avec chat en temps réel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#a1c4fd",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Graduation%20cap/3D/graduation_cap_3d.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Graduation%20cap/3D/graduation_cap_3d.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
