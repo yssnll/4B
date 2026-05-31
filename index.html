@@ -17,11 +17,17 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="Agenda 4-B">
+        <link rel="manifest" href="/manifest.json">
         <title>Agenda Scolaire | Liquid Glass</title>
         
         <script src="https://cdn.tailwindcss.com"></script>
@@ -1023,6 +1029,12 @@
         <script>
             const SUPABASE_URL = 'https://jvxtvurjjuzozivefmfe.supabase.co';
             const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2eHR2dXJqanV6b3ppdmVmbWZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMzYyMjEsImV4cCI6MjA5MzcxMjIyMX0.6rrOisJr9iD56Ki1PJ9dfyRRBBrEdZwfJ5N6GpUkIWY';
+
+            // ── PUSH NOTIFICATIONS ──
+            // Remplace cette clé par ta vraie clé VAPID publique (voir README)
+            const VAPID_PUBLIC_KEY = 'BP_w2qqZMg9Bfqv-2oS8lv5jiRzmQxrhPZHkCRPbX-12m_YsMZacsUn0-ZDRs3_pkD8VCZHVxJw31wGLiwUj0tg';
+            let lastNotifiedMsgIds = new Set();
+            let swRegistration = null;
             let _supabase;
             try { _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.error("Erreur Supabase init"); }
 
@@ -1224,6 +1236,7 @@
                     }
                     // ----------------------------------------------------
                     updateWelcomeUI(); initApp(); loadAllUsers();
+                    registerPushNotifications();
                     setupTypingListener();
                     loadGlobalApiKey();
                     if (currentUser === "Yassine El") {
@@ -1815,8 +1828,16 @@
                     .neq('auteur_id', currentUserId);
                 if (genMsgs && genMsgs.length > 0) {
                     const genSeen = await seenSetForIds(genMsgs.map(m => m.id));
-                    document.getElementById('chat-notif').style.display =
-                        genMsgs.some(m => !genSeen.has(String(m.id))) ? 'block' : 'none';
+                    const hasUnreadGen = genMsgs.some(m => !genSeen.has(String(m.id)));
+                    document.getElementById('chat-notif').style.display = hasUnreadGen ? 'block' : 'none';
+                    // Notification locale chat général si l'app est en arrière-plan
+                    if (hasUnreadGen && document.hidden) {
+                        const newGenMsgs = genMsgs.filter(m => !genSeen.has(String(m.id)) && !lastNotifiedMsgIds.has('gen-' + m.id));
+                        if (newGenMsgs.length > 0) {
+                            lastNotifiedMsgIds.add('gen-' + newGenMsgs[0].id);
+                            showLocalNotification('🌎 Chat Général', 'Nouveau message reçu', 'general');
+                        }
+                    }
                 } else {
                     document.getElementById('chat-notif').style.display = 'none';
                 }
@@ -1843,6 +1864,20 @@
                 // NE PAS marquer comme vu ici — c'est loadGlobalComments qui le fait
                 // quand les messages sont réellement affichés à l'écran.
                 updateBellUI(privateUnreadList.length);
+
+                // Notification locale message privé si l'app est en arrière-plan
+                if (document.hidden && privateUnreadList.length > 0) {
+                    const latestNew = privateUnreadList.find(m => !lastNotifiedMsgIds.has(m.id));
+                    if (latestNew) {
+                        lastNotifiedMsgIds.add(latestNew.id);
+                        const cleanMsg = latestNew.message
+                            .replace(/\[PRIV_ID:[^\]]*\]/g, '')
+                            .replace(/\[REPLY:\d+\]/g, '')
+                            .replace(/\[REACTIONS:\{.*?\}\]/g, '')
+                            .substring(0, 80);
+                        showLocalNotification(`💬 Message de ${latestNew.auteur}`, cleanMsg || '...', 'priv-' + latestNew.id);
+                    }
+                }
             }
 
             async function openAdminHistory() {
@@ -2428,6 +2463,13 @@ async function markAsSeen(id) {
                     if (data) url = _supabase.storage.from('chat-attachments').getPublicUrl(name).data.publicUrl;
                 }
                 await _supabase.from('commentaires').insert([{ auteur: currentUser, auteur_id: currentUserId, message: finalMsg, file_url: url }]);
+
+                // Déclencher une notification push pour le destinataire du message privé
+                if (currentChatType === "private") {
+                    const pushBody = m || (url ? '📎 Fichier joint' : '');
+                    triggerPushToUser(assistanceTargetId, `💬 ${currentUser}`, pushBody.substring(0, 100));
+                }
+
                 if (currentChatType === "private" && assistanceTargetUser === "Yassine El" && currentUser !== "Yassine El") {
                     await loadYassineAwayStatus();
                     await handleYassineAwayAutoReply(getPrivateTag(currentUserId, assistanceTargetId), currentUser, m);
@@ -3017,6 +3059,114 @@ ${quorbyCustomInstructions ? `\n## Instructions personnalisées (priorité haute
                 }
             }
             
+
+            // ═══════════════════════════════════════════════════════════
+            // PUSH NOTIFICATIONS — Fonctions
+            // ═══════════════════════════════════════════════════════════
+
+            function urlBase64ToUint8Array(base64String) {
+                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+                const rawData = window.atob(base64);
+                const outputArray = new Uint8Array(rawData.length);
+                for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                return outputArray;
+            }
+
+            async function registerPushNotifications() {
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                    console.log('[Push] Non supporté sur cet appareil.');
+                    return;
+                }
+                if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY === 'REMPLACER_PAR_TA_CLE_VAPID_PUBLIQUE') {
+                    console.warn('[Push] Clé VAPID non configurée — notifications push désactivées.');
+                    return;
+                }
+                try {
+                    swRegistration = await navigator.serviceWorker.register('/sw.js');
+                    console.log('[Push] Service Worker enregistré');
+
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        console.log('[Push] Permission refusée par l\'utilisateur');
+                        return;
+                    }
+
+                    let sub = await swRegistration.pushManager.getSubscription();
+                    if (!sub) {
+                        sub = await swRegistration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                        });
+                    }
+
+                    // Stocker l'abonnement dans Supabase
+                    await _supabase.from('push_subscriptions').upsert([{
+                        user_id: String(currentUserId),
+                        subscription: JSON.parse(JSON.stringify(sub)),
+                        updated_at: new Date().toISOString()
+                    }], { onConflict: 'user_id' });
+
+                    console.log('[Push] Abonnement enregistré ✓');
+                } catch(e) {
+                    console.error('[Push] Erreur enregistrement:', e);
+                }
+            }
+
+            async function showLocalNotification(title, body, tag = 'message') {
+                if (Notification.permission !== 'granted') return;
+                try {
+                    if (swRegistration) {
+                        await swRegistration.showNotification(title, {
+                            body,
+                            icon: '/icon-192.png',
+                            badge: '/icon-192.png',
+                            tag,
+                            renotify: true,
+                            vibrate: [200, 100, 200]
+                        });
+                    } else {
+                        new Notification(title, { body, tag });
+                    }
+                } catch(e) {
+                    console.error('[Push] Erreur notification locale:', e);
+                }
+            }
+
+            async function triggerPushToUser(userId, title, body) {
+                if (!userId) return;
+                try {
+                    const { data: sub } = await _supabase
+                        .from('push_subscriptions')
+                        .select('subscription')
+                        .eq('user_id', String(userId))
+                        .single();
+
+                    if (!sub?.subscription) return;
+
+                    const response = await fetch('/api/send-push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            subscription: sub.subscription,
+                            title,
+                            body: (body || '').substring(0, 100),
+                            tag: 'msg-' + Date.now()
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        // Abonnement expiré → supprimer
+                        if (data.statusCode === 410 || response.status === 410) {
+                            await _supabase.from('push_subscriptions').delete().eq('user_id', String(userId));
+                        }
+                    }
+                } catch(e) {
+                    console.error('[Push] Erreur trigger push:', e);
+                }
+            }
+
         </script>
     </body>
     </html>
