@@ -1865,19 +1865,7 @@
                 // quand les messages sont réellement affichés à l'écran.
                 updateBellUI(privateUnreadList.length);
 
-                // Notification locale message privé si l'app est en arrière-plan
-                if (document.hidden && privateUnreadList.length > 0) {
-                    const latestNew = privateUnreadList.find(m => !lastNotifiedMsgIds.has(m.id));
-                    if (latestNew) {
-                        lastNotifiedMsgIds.add(latestNew.id);
-                        const cleanMsg = latestNew.message
-                            .replace(/\[PRIV_ID:[^\]]*\]/g, '')
-                            .replace(/\[REPLY:\d+\]/g, '')
-                            .replace(/\[REACTIONS:\{.*?\}\]/g, '')
-                            .substring(0, 80);
-                        showLocalNotification(`💬 Message de ${latestNew.auteur}`, cleanMsg || '...', 'priv-' + latestNew.id);
-                    }
-                }
+
             }
 
             async function openAdminHistory() {
@@ -2467,7 +2455,7 @@ async function markAsSeen(id) {
                 // Déclencher une notification push pour le destinataire du message privé
                 if (currentChatType === "private") {
                     const pushBody = m || (url ? '📎 Fichier joint' : '');
-                    triggerPushToUser(assistanceTargetId, `💬 ${currentUser}`, pushBody.substring(0, 100));
+                    triggerPushToUser(assistanceTargetId, `Message de ${currentUser}`, pushBody.substring(0, 100));
                 }
 
                 if (currentChatType === "private" && assistanceTargetUser === "Yassine El" && currentUser !== "Yassine El") {
