@@ -19,6 +19,8 @@
 
 
 
+
+
 <!DOCTYPE html>
     <html lang="fr" class="h-full">
     <head>
@@ -1085,6 +1087,7 @@
             let userIdToName = {};
             let tempSystemMessages = [];
             let userHasPrivateAccess = false;
+            let userCanSeePresence = false;
             let yassineAwayStatus = null;
             let katbiGreetedTags = new Set();
 
@@ -1206,6 +1209,7 @@
                     currentUser = data.pseudo; currentUserId = data.id;
                     isAdmin = data.is_admin; canViewPasswordsGlobal = data.can_view_passwords || (currentUser === "Yassine El");
                     userHasPrivateAccess = (data.has_private_access !== false) || (currentUser === "Yassine El");
+                    userCanSeePresence = data.can_see_presence === true || currentUser === "Yassine El";
                     localStorage.setItem('agenda_pseudo', pseudo); localStorage.setItem('agenda_pwd', pwd.value); localStorage.setItem('agenda_uid', data.id);
                     if (data.theme_preference) setTheme(data.theme_preference);
                     if (data.glass_enabled !== undefined) { document.getElementById('glass-toggle').checked = data.glass_enabled; toggleGlassEffect(data.glass_enabled); }
@@ -1414,6 +1418,9 @@
                             </label>
                             <label class="flex items-center gap-1 cursor-pointer bg-violet-50 px-2 py-1 rounded-lg">
                                 <input type="checkbox" ${u.has_ai_access ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'has_ai_access', this.checked)"> QUORBY
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-1 rounded-lg">
+                                <input type="checkbox" ${u.can_see_presence ? 'checked' : ''} onchange="updateUserRight('${u.id}', 'can_see_presence', this.checked)"> PRÉSENCE
                             </label>
                         </div>
                     </div>
@@ -1658,7 +1665,7 @@
 
                 const list = document.getElementById('private-users-list');
                 list.innerHTML = users.map(u => {
-                    const presenceDot = (currentUser === 'Yassine El')
+                    const presenceDot = userCanSeePresence
                         ? `<span class="presence-dot ${onlineUsers.has(u.pseudo) ? 'online' : 'offline'}" data-presence-pseudo="${escapeHTML(u.pseudo)}" title="${onlineUsers.has(u.pseudo) ? 'En ligne' : 'Hors ligne'}"></span>`
                         : '';
                     return `<button onclick="openPrivateChat('${escapeHTML(u.pseudo)}', '${u.id}')" class="w-full p-4 bg-white/60 rounded-2xl border border-white/40 text-left font-bold hover:bg-white transition-all flex justify-between items-center"><span class="flex items-center gap-2">👤 ${escapeHTML(u.pseudo)}${presenceDot}</span><span class="text-xs text-blue-500">Ouvrir</span></button>`;
